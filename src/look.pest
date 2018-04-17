@@ -1,0 +1,83 @@
+newline    = _{ "\n" }
+whitespace = _{ " " | newline }
+comment = _{ "//" ~ (!newline ~ any)* }
+
+digit = { '0'..'9' }
+bin_digit = { "0" | "1" }
+hex_digit = { digit | 'A'..'F' }
+alpha = { 'a'..'z' | 'A'..'Z' }
+alphanum = { alpha | digit }
+sid_char = { alphanum | "_" }
+
+// Keywords
+_use = { "use" }
+_mod = { "mod" }
+_self = { "self" }
+_super = { "super" }
+_deps = { "deps" }
+_magic = { "magic" }
+_goto = { "goto" }
+_label = { "label" }
+_break = { "break" }
+_return = { "return" }
+_while = { "while" }
+_match = { "match" }
+_if = { "if" }
+_then = { "then" }
+_else = { "else" }
+_let = { "let" }
+_as = { "as" }
+_type_kw = { "type" }
+_macro = { "macro" }
+_mut = { "mut" }
+keyword = { _use | _mod | _self | _super | _deps | _magic | _goto | _label | _break | _return | _while | _match | _if | _then | _else | _let | _as | _type_kw | _macro | _mut }
+
+// Punctuation
+scope = { "::" }
+
+// Identifiers
+sid = @{ !keyword ~ ((alpha ~ (sid_char{0, 126})) | ("_" ~ (sid_char{1, 126}))) ~ !sid_char }
+id = { sid ~ (scope ~ sid)* }
+
+// Literals
+dec_int = @{ digit ~ (digit | "_")* }
+bin_int = @{ "0b" ~ "_"* ~ bin_digit ~ (bin_digit | "_")* }
+hex_int = @{ "0x" ~ "_"* ~ hex_digit ~ (hex_digit | "_")* }
+float = @{ dec_int ~ "." ~ "_"* ~ dec_int ~ ("e" ~ ("+" | "-")? ~ "_"* ~ dec_int )? }
+string = @{ "\"" ~ string_inner* ~ "\"" }
+string_inner = @{ (!("\"" | "\\") ~ any) | escape }
+escape = @{ "\\" ~ ("\\" | "\"" | "n" | "t" | "0" | ("u" ~ hex_digit{4})) }
+literal = { bin_int | hex_int | float | dec_int | string }
+
+// Attributes
+meta_item_nullary =  { sid }
+meta_item_pair = { sid ~ "=" ~ literal }
+meta_item_lit_arg = { sid ~ "(" ~ literal ~ ")" }
+meta_item_args = { sid ~ "(" ~ meta_item ~ ("," ~ meta_item)* ~ ")" }
+meta_item = { meta_item_pair | meta_item_lit_arg | meta_item_args | meta_item_nullary }
+attribute = { "#[" ~ meta_item ~ "]" }
+
+// Macros
+macro_invocation = ${ "$" ~ id ~ "(" ~ macro_args ~ ")" }
+non_paren = @{ (!("(" | ")") ~ any) }
+macro_args = @{ (non_paren | ("(" ~ macro_args ~ ")"))* }
+
+repetition = { bin_int | hex_int | dec_int | macro_invocation }
+
+// Types
+fun_named_type = { product_named_type ~ "->" ~ _type }
+fun_anon_type = { product_anon_type ~ "->" ~ _type }
+actual_named_product_field = { sid ~ ":" ~ _type }
+named_product_field = { (attribute+ ~ "{" ~ actual_named_product_field ~ "}") | actual_named_product_field }
+product_named_type = { "(" ~ named_product_field ~ ("," ~ named_product_field)* ~ ")" }
+product_anon_type = { "(" ~ ( _type ~ ("," ~ _type)* | "") ~ ")" }
+product_repeated_type = { "(" ~ _type ~ ";" ~ repetition ~ ")" }
+array_type = { "[" ~ _type ~ "]" }
+ptr_mut_type = { "~" ~ _type }
+ptr_type = { "@" ~ _type }
+actual_named_type_arg = { sid ~ "=" ~ _type }
+named_type_arg = { (attribute+ ~ "{" ~ actual_named_type_arg ~ "}") | actual_named_type_arg }
+type_application_named = { id ~ "<" ~ named_type_arg ~ ("," ~ named_type_arg)* ~ ">" }
+type_application_anon = { id ~ "<" ~ _type ~ ("," ~ _type)* ~ ">" }
+actual_type = { type_application_named | type_application_anon | id | macro_invocation | ptr_type | ptr_mut_type | array_type | product_repeated_type | fun_anon_type | fun_named_type | product_anon_type | product_named_type }
+_type = { (attribute+ ~ "{" ~ actual_type ~ "}") | actual_type }

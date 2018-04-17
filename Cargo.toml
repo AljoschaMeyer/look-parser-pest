@@ -1,0 +1,8 @@
+[package]
+name = "look-parser-pest"
+version = "0.1.0"
+authors = ["AljoschaMeyer <mail@aljoscha-meyer.de>"]
+
+[dependencies]
+pest = "1.0.6"
+pest_derive = "1.0.7"
