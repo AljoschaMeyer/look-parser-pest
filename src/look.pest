@@ -30,7 +30,8 @@ _as = { "as" }
 _type_kw = { "type" }
 _macro = { "macro" }
 _mut = { "mut" }
-keyword = { _use | _mod | _self | _super | _deps | _magic | _goto | _label | _break | _return | _while | _match | _if | _then | _else | _let | _as | _type_kw | _macro | _mut }
+_pub = { "pub" }
+keyword = { _use | _mod | _self | _super | _deps | _magic | _goto | _label | _break | _return | _while | _match | _if | _then | _else | _let | _as | _type_kw | _macro | _mut | _pub }
 
 // Punctuation
 scope = { "::" }
@@ -81,3 +82,12 @@ type_application_named = { id ~ "<" ~ named_type_arg ~ ("," ~ named_type_arg)* ~
 type_application_anon = { id ~ "<" ~ _type ~ ("," ~ _type)* ~ ">" }
 actual_type = { type_application_named | type_application_anon | id | macro_invocation | ptr_type | ptr_mut_type | array_type | product_repeated_type | fun_anon_type | fun_named_type | product_anon_type | product_named_type }
 _type = { (attribute+ ~ "{" ~ actual_type ~ "}") | actual_type }
+
+// TypeDefs
+type_level_arg = { (attribute+ ~ "{" ~ sid ~ "}") | sid }
+actual_type_level_fun = { "<" ~ type_level_arg ~ ("," ~ type_level_arg)* ~ ">" ~ "=>" ~ type_def }
+type_level_fun = { (attribute+ ~ "{" ~ actual_type_level_fun ~ "}") | actual_type_level_fun }
+actual_summand = { "|" ~ _pub? ~ sid ~ (product_anon_type | product_named_type | "") }
+summand = { ((attribute+ ~ "{" ~ actual_summand ~ "}") | actual_summand ) }
+sum = { ((attribute+ ~ "{" ~ _pub? ~ summand+ ~ "}") | (_pub? ~ summand+)) }
+type_def = { sum | type_level_fun | _type }

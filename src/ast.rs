@@ -60,6 +60,7 @@ fn test_sid() {
     assert!(p_sid("type").is_err());
     assert!(p_sid("macro").is_err());
     assert!(p_sid("mut").is_err());
+    assert!(p_sid("pub").is_err());
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -713,6 +714,15 @@ fn test_type() {
         _ => panic!(),
     }
 
+    match p_type("xyz<#[foo]{abc}>").unwrap() {
+        Type::TypeApplicationAnon(attrs, id, args, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_id(&id, "xyz");
+            assert_sid_type(&args[0], "abc");
+        }
+        _ => panic!(),
+    }
+
     match p_type("xyz<#[foo]{abc = def}>").unwrap() {
         Type::TypeApplicationNamed(attrs, id, triples, _) => {
             assert_eq!(attrs, &[][..]);
@@ -933,4 +943,401 @@ fn test_type() {
         }
         _ => panic!(),
     }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+// Bool is whether the fields are public
+pub enum Summand<'i> {
+    Empty(bool, SimpleIdentifier<'i>, Pair<'i, Rule>),
+    Anon(bool, SimpleIdentifier<'i>,  Vec<Type<'i>>, Pair<'i, Rule>),
+    Named(bool, SimpleIdentifier<'i>, Vec<(Vec<Attribute<'i>>, SimpleIdentifier<'i>, Type<'i>)>, Pair<'i, Rule>),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum TypeDef<'i> {
+    Alias(Type<'i>),
+    TypeLevelFun(Vec<Attribute<'i>>, Vec<(Vec<Attribute<'i>>, SimpleIdentifier<'i>)>, Box<TypeDef<'i>>, Pair<'i, Rule>),
+    // pub | pub A(Foo, Bar) | pub B | C(x: Foo)
+    // Bool is whether the tag constructors are public
+    Sum(bool, Vec<Attribute<'i>>, Vec<(Vec<Attribute<'i>>, Summand<'i>)>, Pair<'i, Rule>),
+}
+
+fn pair_to_type_level_arg<'i>(p: Pair<'i, Rule>) -> (Vec<Attribute<'i>>, SimpleIdentifier<'i>) {
+    assert!(p.as_rule() == Rule::type_level_arg);
+
+    let mut attrs = vec![];
+
+    for pair in p.into_inner() {
+        match pair.as_rule() {
+            Rule::attribute => {
+                attrs.push(pair_to_attribute(pair));
+            }
+
+            Rule::sid => {
+                return (attrs, pair_to_simple_identifier(pair));
+            }
+
+            _ => unreachable!()
+        }
+    }
+
+    unreachable!()
+}
+
+fn pair_to_actual_summand<'i>(p: Pair<'i, Rule>) -> Summand<'i> {
+    assert!(p.as_rule() == Rule::actual_summand);
+
+    let mut pairs = p.clone().into_inner().peekable();
+    let public = pairs.peek().unwrap().as_rule() == Rule::_pub;
+
+    if public {
+        pairs.next();
+    }
+
+    let sid = pair_to_simple_identifier(pairs.next().unwrap());
+
+    match pairs.next() {
+        None => Summand::Empty(public, sid, p),
+
+        Some(pair) => {
+            match pair.as_rule() {
+                Rule::product_anon_type => {
+                    Summand::Anon(public, sid, pair.into_inner().map(pair_to_type).collect(), p)
+                }
+
+                Rule::product_named_type => {
+                    Summand::Named(public, sid, pair.into_inner().map(pair_to_named_product_field).collect(), p)
+                }
+
+                _ => unreachable!()
+            }
+        }
+    }
+}
+
+fn pair_to_summand<'i>(p: Pair<'i, Rule>) -> (Vec<Attribute<'i>>, Summand<'i>) {
+    assert!(p.as_rule() == Rule::summand);
+
+    let mut attrs = vec![];
+
+    for pair in p.into_inner() {
+        match pair.as_rule() {
+            Rule::attribute => {
+                attrs.push(pair_to_attribute(pair));
+            }
+
+            Rule::actual_summand => {
+                return (attrs, pair_to_actual_summand(pair));
+            }
+
+            _ => unreachable!()
+        }
+    }
+
+    unreachable!()
+}
+
+fn pair_to_type_def<'i>(p: Pair<'i, Rule>) -> TypeDef<'i> {
+    debug_assert!(p.as_rule() == Rule::type_def);
+    let pair = p.clone().into_inner().next().unwrap();
+
+    match pair.as_rule() {
+        Rule::_type => {
+            TypeDef::Alias(pair_to_type(pair))
+        }
+
+        Rule::type_level_fun => {
+            let mut attrs = vec![];
+
+            for pair in pair.into_inner() {
+                match pair.as_rule() {
+                    Rule::attribute => {
+                        attrs.push(pair_to_attribute(pair));
+                    }
+
+                    Rule::actual_type_level_fun => {
+                        let mut args = vec![];
+
+                        for pair in pair.into_inner() {
+                            match pair.as_rule() {
+                                Rule::type_level_arg => {
+                                    args.push(pair_to_type_level_arg(pair));
+                                }
+
+                                Rule::type_def => {
+                                    return TypeDef::TypeLevelFun(attrs, args, Box::new(pair_to_type_def(pair)), p);
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+                        unreachable!()
+                    }
+                    _ => unreachable!(),
+                }
+            }
+
+            unreachable!()
+        }
+
+        Rule::sum => {
+            let mut pairs = pair.into_inner().peekable();
+
+            let mut attrs = vec![];
+            let mut public = false;
+            let mut summands = vec![];
+
+            for pair in pairs {
+                match pair.as_rule() {
+                    Rule::attribute => {
+                        attrs.push(pair_to_attribute(pair));
+                    }
+
+                    Rule::_pub => {
+                        public = true;
+                    }
+
+                    Rule::summand => {
+                        summands.push(pair_to_summand(pair));
+                    }
+
+                    _ => unreachable!()
+                }
+            }
+            return TypeDef::Sum(public, attrs, summands, p);
+        }
+
+        _ => unreachable!()
+    }
+}
+
+pub fn p_type_def<'i>(input: &'i str) -> PestResult<TypeDef<'i>> {
+    LookParser::parse(Rule::type_def, input).map(|mut pairs| pair_to_type_def(pairs.next().unwrap()))
+}
+
+#[cfg(test)]
+fn assert_sid_type_def(t: &TypeDef, expected: &str) {
+    match t {
+        &TypeDef::Alias(ref inner) => {
+            assert_sid_type(inner, expected);
+        }
+        _ => panic!(),
+    }
+}
+
+#[test]
+fn test_type_def() {
+    match p_type_def("abc::def").unwrap() {
+        TypeDef::Alias(Type::Id(attrs, id, _)) => {
+            assert_eq!(attrs, &[][..]);
+            assert_eq!(id.0[0].as_str(), "abc");
+            assert_eq!(id.0[1].as_str(), "def");
+        }
+        _ => panic!()
+    }
+
+    match p_type_def("#[foo] { abc::def }").unwrap() {
+        TypeDef::Alias(Type::Id(attrs, id, _)) => {
+            assert_eq!(attrs.len(), 1);
+            assert_eq!(id.0[0].as_str(), "abc");
+            assert_eq!(id.0[1].as_str(), "def");
+        }
+        _ => panic!()
+    }
+
+    match p_type_def("<A> => abc").unwrap() {
+        TypeDef::TypeLevelFun(attrs, args, ret, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_eq!(args.len(), 1);
+            assert_eq!(args[0].0, &[][..]);
+            assert_sid(&args[0].1, "A");
+            assert_sid_type_def(ret.as_ref(), "abc");
+        }
+        _ => panic!()
+    }
+
+    match p_type_def("<A, B> => abc").unwrap() {
+        TypeDef::TypeLevelFun(attrs, args, ret, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_eq!(args.len(), 2);
+            assert_eq!(args[0].0, &[][..]);
+            assert_sid(&args[0].1, "A");
+            assert_eq!(args[1].0, &[][..]);
+            assert_sid(&args[1].1, "B");
+            assert_sid_type_def(ret.as_ref(), "abc");
+        }
+        _ => panic!()
+    }
+
+    match p_type_def("<#[foo] { A }> => abc").unwrap() {
+        TypeDef::TypeLevelFun(attrs, args, ret, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_eq!(args.len(), 1);
+            assert_eq!(args[0].0.len(), 1);
+            assert_sid(&args[0].1, "A");
+            assert_sid_type_def(ret.as_ref(), "abc");
+        }
+        _ => panic!()
+    }
+
+    match p_type_def("#[foo] { <A> => abc }").unwrap() {
+        TypeDef::TypeLevelFun(attrs, args, ret, _) => {
+            assert_eq!(attrs.len(), 1);
+            assert_eq!(args.len(), 1);
+            assert_eq!(args[0].0, &[][..]);
+            assert_sid(&args[0].1, "A");
+            assert_sid_type_def(ret.as_ref(), "abc");
+        }
+        _ => panic!()
+    }
+
+    match p_type_def("| A").unwrap() {
+        TypeDef::Sum(public, attrs, summands, _) => {
+            assert!(!public);
+            assert_eq!(attrs, &[][..]);
+            assert_eq!(summands.len(), 1);
+            assert_eq!(summands[0].0, &[][..]);
+            match summands[0].1 {
+                Summand::Empty(public, ref sid, _) => {
+                    assert!(!public);
+                    assert_sid(sid, "A");
+                }
+                _ => panic!()
+            }
+        }
+        _ => panic!()
+    }
+
+    match p_type_def("pub | A").unwrap() {
+        TypeDef::Sum(public, attrs, summands, _) => {
+            assert!(public);
+            assert_eq!(attrs, &[][..]);
+            assert_eq!(summands.len(), 1);
+            assert_eq!(summands[0].0, &[][..]);
+            match summands[0].1 {
+                Summand::Empty(public, ref sid, _) => {
+                    assert!(!public);
+                    assert_sid(sid, "A");
+                }
+                _ => panic!()
+            }
+        }
+        _ => panic!()
+    }
+
+
+    match p_type_def("#[foo] { pub | A }").unwrap() {
+        TypeDef::Sum(public, attrs, summands, _) => {
+            assert!(public);
+            assert_eq!(attrs.len(), 1);
+            assert_eq!(summands.len(), 1);
+            assert_eq!(summands[0].0, &[][..]);
+            match summands[0].1 {
+                Summand::Empty(public, ref sid, _) => {
+                    assert!(!public);
+                    assert_sid(sid, "A");
+                }
+                _ => panic!()
+            }
+        }
+        _ => panic!()
+    }
+
+    match p_type_def("pub #[foo] { | A }").unwrap() {
+        TypeDef::Sum(public, attrs, summands, _) => {
+            assert!(public);
+            assert_eq!(attrs.len(), 0);
+            assert_eq!(summands.len(), 1);
+            assert_eq!(summands[0].0.len(), 1);
+            match summands[0].1 {
+                Summand::Empty(public, ref sid, _) => {
+                    assert!(!public);
+                    assert_sid(sid, "A");
+                }
+                _ => panic!()
+            }
+        }
+        _ => panic!()
+    }
+
+    match p_type_def("| pub A").unwrap() {
+        TypeDef::Sum(public, attrs, summands, _) => {
+            assert!(!public);
+            assert_eq!(attrs, &[][..]);
+            assert_eq!(summands.len(), 1);
+            assert_eq!(summands[0].0, &[][..]);
+            match summands[0].1 {
+                Summand::Empty(public, ref sid, _) => {
+                    assert!(public);
+                    assert_sid(sid, "A");
+                }
+                _ => panic!()
+            }
+        }
+        _ => panic!()
+    }
+
+    match p_type_def("| A | B").unwrap() {
+        TypeDef::Sum(public, attrs, summands, _) => {
+            assert!(!public);
+            assert_eq!(attrs, &[][..]);
+            assert_eq!(summands.len(), 2);
+            assert_eq!(summands[0].0, &[][..]);
+            match summands[0].1 {
+                Summand::Empty(public, ref sid, _) => {
+                    assert!(!public);
+                    assert_sid(sid, "A");
+                }
+                _ => panic!()
+            }
+            assert_eq!(summands[1].0, &[][..]);
+            match summands[1].1 {
+                Summand::Empty(public, ref sid, _) => {
+                    assert!(!public);
+                    assert_sid(sid, "B");
+                }
+                _ => panic!()
+            }
+        }
+        _ => panic!()
+    }
+
+    match p_type_def("| A(B)").unwrap() {
+        TypeDef::Sum(public, attrs, summands, _) => {
+            assert!(!public);
+            assert_eq!(attrs, &[][..]);
+            assert_eq!(summands.len(), 1);
+            assert_eq!(summands[0].0, &[][..]);
+            match summands[0].1 {
+                Summand::Anon(public, ref sid, ref types, _) => {
+                    assert!(!public);
+                    assert_sid(sid, "A");
+                    assert_eq!(types.len(), 1);
+                    assert_sid_type(&types[0], "B");
+                }
+                _ => panic!()
+            }
+        }
+        _ => panic!()
+    }
+
+    match p_type_def("| A(b: C)").unwrap() {
+        TypeDef::Sum(public, attrs, summands, _) => {
+            assert!(!public);
+            assert_eq!(attrs, &[][..]);
+            assert_eq!(summands.len(), 1);
+            assert_eq!(summands[0].0, &[][..]);
+            match summands[0].1 {
+                Summand::Named(public, ref sid, ref args, _) => {
+                    assert!(!public);
+                    assert_sid(sid, "A");
+                    assert_eq!(args.len(), 1);
+                }
+                _ => panic!()
+            }
+        }
+        _ => panic!()
+    }
+
+
+    // | A (b: C)
 }
