@@ -1337,7 +1337,291 @@ fn test_type_def() {
         }
         _ => panic!()
     }
+}
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum Pattern<'i> {
+    Blank(Pair<'i, Rule>),
+    Id(bool, SimpleIdentifier<'i>, Option<Type<'i>>, Pair<'i, Rule>),
+    Literal(Literal<'i>),
+    Ptr(Box<Pattern<'i>>, Pair<'i, Rule>),
+    ProductAnon(Vec<(Vec<Attribute<'i>>, Pattern<'i>)>, Pair<'i, Rule>),
+    ProductNamed(Vec<(Vec<Attribute<'i>>, SimpleIdentifier<'i>, Pattern<'i>)>, Pair<'i, Rule>),
+    SummandEmpty(SimpleIdentifier<'i>, Pair<'i, Rule>),
+    SummandAnon(SimpleIdentifier<'i>, Vec<(Vec<Attribute<'i>>, Pattern<'i>)>, Pair<'i, Rule>),
+    SummandNamed(SimpleIdentifier<'i>, Vec<(Vec<Attribute<'i>>, SimpleIdentifier<'i>, Pattern<'i>)>, Pair<'i, Rule>)
+}
 
-    // | A (b: C)
+fn pair_to_annotated_named_pattern<'i>(p: Pair<'i, Rule>) -> (Vec<Attribute<'i>>, SimpleIdentifier<'i>, Pattern<'i>) {
+    debug_assert!(p.as_rule() == Rule::maybe_annotated_named_pattern);
+
+    let mut attrs = vec![];
+    let mut sid = None;
+
+    for pair in p.into_inner() {
+        match pair.as_rule() {
+            Rule::attribute => {
+                attrs.push(pair_to_attribute(pair));
+            }
+
+            Rule::sid => {
+                sid = Some(pair_to_simple_identifier(pair));
+            }
+
+            Rule::pattern => {
+                return (attrs, sid.unwrap(), pair_to_pattern(pair));
+            }
+
+            _ => unreachable!()
+        }
+    }
+    unreachable!()
+}
+
+fn pair_to_annotated_pattern<'i>(p: Pair<'i, Rule>) -> (Vec<Attribute<'i>>, Pattern<'i>) {
+    debug_assert!(p.as_rule() == Rule::maybe_annotated_pattern);
+
+    let mut attrs = vec![];
+
+    for pair in p.into_inner() {
+        match pair.as_rule() {
+            Rule::attribute => {
+                attrs.push(pair_to_attribute(pair));
+            }
+
+            Rule::pattern => {
+                return (attrs, pair_to_pattern(pair));
+            }
+
+            _ => unreachable!()
+        }
+    }
+    unreachable!()
+}
+
+fn pair_to_pattern<'i>(p: Pair<'i, Rule>) -> Pattern<'i> {
+    debug_assert!(p.as_rule() == Rule::pattern);
+    let pair = p.clone().into_inner().next().unwrap();
+
+    match pair.as_rule() {
+        Rule::blank_pattern => {
+            Pattern::Blank(p)
+        }
+
+        Rule::literal => {
+            Pattern::Literal(pair_to_literal(pair))
+        }
+
+        Rule::ptr_pattern => {
+            Pattern::Ptr(Box::new(pair_to_pattern(pair.into_inner().next().unwrap())), p)
+        }
+
+        Rule::id_pattern => {
+            let mut pairs = pair.into_inner().peekable();
+            let mutable = pairs.peek().unwrap().as_rule() == Rule::_mut;
+
+            if mutable {
+                pairs.next();
+            }
+
+            let sid = pair_to_simple_identifier(pairs.next().unwrap());
+            let type_annotation = match pairs.next() {
+                None => None,
+                Some(pair) => Some(pair_to_type(pair))
+            };
+
+            Pattern::Id(mutable, sid, type_annotation, p)
+        }
+
+        Rule::product_anon_pattern => {
+            Pattern::ProductAnon(pair.into_inner().map(pair_to_annotated_pattern).collect(), p)
+        }
+
+        Rule::product_named_pattern => {
+            Pattern::ProductNamed(pair.into_inner().map(pair_to_annotated_named_pattern).collect(), p)
+        }
+
+        Rule::summand_pattern => {
+            let mut pairs = pair.into_inner();
+            let sid = pair_to_simple_identifier(pairs.next().unwrap());
+
+            match pairs.next() {
+                None => Pattern::SummandEmpty(sid, p),
+
+                Some(pair) => {
+                    match pair.as_rule() {
+                        Rule::product_anon_pattern => {
+                            Pattern::SummandAnon(sid, pair.into_inner().map(pair_to_annotated_pattern).collect(), p)
+                        }
+
+                        Rule::product_named_pattern => {
+                            Pattern::SummandNamed(sid, pair.into_inner().map(pair_to_annotated_named_pattern).collect(), p)
+                        }
+
+                        _ => unreachable!()
+                    }
+                }
+            }
+        }
+
+        _ => unreachable!()
+    }
+}
+
+pub fn p_pattern<'i>(input: &'i str) -> PestResult<Pattern<'i>> {
+    LookParser::parse(Rule::pattern, input).map(|mut pairs| pair_to_pattern(pairs.next().unwrap()))
+}
+
+#[test]
+fn test_pattern() {
+    match p_pattern("_").unwrap() {
+        Pattern::Blank(_) => {}
+        _ => panic!()
+    }
+
+    match p_pattern("42").unwrap() {
+        Pattern::Literal(Literal::Int(int, _)) => assert_eq!(int, 42),
+        _ => panic!()
+    }
+
+    match p_pattern("_abc").unwrap() {
+        Pattern::Id(mutable, sid, type_annotation, _) => {
+            assert!(!mutable);
+            assert_sid(&sid, "_abc");
+            assert_eq!(type_annotation, None);
+        }
+        _ => panic!()
+    }
+
+    match p_pattern("mut abc").unwrap() {
+        Pattern::Id(mutable, sid, type_annotation, _) => {
+            assert!(mutable);
+            assert_sid(&sid, "abc");
+            assert_eq!(type_annotation, None);
+        }
+        _ => panic!()
+    }
+
+    match p_pattern("abc: T").unwrap() {
+        Pattern::Id(mutable, sid, type_annotation, _) => {
+            assert!(!mutable);
+            assert_sid(&sid, "abc");
+            assert_sid_type(&type_annotation.unwrap(), "T");
+        }
+        _ => panic!()
+    }
+
+    match p_pattern("@_").unwrap() {
+        Pattern::Ptr(inner, _) => {
+            match inner.as_ref() {
+                &Pattern::Blank(_) => {},
+                _ => panic!()
+            }
+        }
+        _ => panic!()
+    }
+
+    match p_pattern("()").unwrap() {
+        Pattern::ProductAnon(inner, _) => {
+            assert_eq!(inner.len(), 0);
+        }
+        _ => panic!()
+    }
+
+    match p_pattern("(_)").unwrap() {
+        Pattern::ProductAnon(inner, _) => {
+            assert_eq!(inner.len(), 1);
+            assert_eq!(inner[0].0.len(), 0);
+        }
+        _ => panic!()
+    }
+
+    match p_pattern("(_, _)").unwrap() {
+        Pattern::ProductAnon(inner, _) => {
+            assert_eq!(inner.len(), 2);
+            assert_eq!(inner[0].0.len(), 0);
+            assert_eq!(inner[1].0.len(), 0);
+        }
+        _ => panic!()
+    }
+
+    match p_pattern("(#[foo] { _ } )").unwrap() {
+        Pattern::ProductAnon(inner, _) => {
+            assert_eq!(inner.len(), 1);
+            assert_eq!(inner[0].0.len(), 1);
+        }
+        _ => panic!()
+    }
+
+    match p_pattern("(#[foo] #[bar] { _ } )").unwrap() {
+        Pattern::ProductAnon(inner, _) => {
+            assert_eq!(inner.len(), 1);
+            assert_eq!(inner[0].0.len(), 2);
+        }
+        _ => panic!()
+    }
+
+    match p_pattern("(abc = _)").unwrap() {
+        Pattern::ProductNamed(inner, _) => {
+            assert_eq!(inner.len(), 1);
+            assert_eq!(inner[0].0.len(), 0);
+            assert_sid(&inner[0].1, "abc");
+        }
+        _ => panic!()
+    }
+
+    match p_pattern("(abc = _, def = _)").unwrap() {
+        Pattern::ProductNamed(inner, _) => {
+            assert_eq!(inner.len(), 2);
+            assert_eq!(inner[0].0.len(), 0);
+            assert_sid(&inner[0].1, "abc");
+            assert_eq!(inner[1].0.len(), 0);
+            assert_sid(&inner[1].1, "def");
+        }
+        _ => panic!()
+    }
+
+    match p_pattern("(#[foo] { abc = _ } )").unwrap() {
+        Pattern::ProductNamed(inner, _) => {
+            assert_eq!(inner.len(), 1);
+            assert_eq!(inner[0].0.len(), 1);
+            assert_sid(&inner[0].1, "abc");
+        }
+        _ => panic!()
+    }
+
+    match p_pattern("(#[foo] #[bar] { abc = _ } )").unwrap() {
+        Pattern::ProductNamed(inner, _) => {
+            assert_eq!(inner.len(), 1);
+            assert_eq!(inner[0].0.len(), 2);
+            assert_sid(&inner[0].1, "abc");
+        }
+        _ => panic!()
+    }
+
+    match p_pattern("| abc").unwrap() {
+        Pattern::SummandEmpty(sid, _) => {
+            assert_sid(&sid, "abc");
+        }
+        _ => panic!()
+    }
+
+    match p_pattern("| abc(_)").unwrap() {
+        Pattern::SummandAnon(sid, inner, _) => {
+            assert_sid(&sid, "abc");
+            assert_eq!(inner.len(), 1);
+            assert_eq!(inner[0].0.len(), 0);
+        }
+        _ => panic!()
+    }
+
+    match p_pattern("| abc(d = _)").unwrap() {
+        Pattern::SummandNamed(sid, inner, _) => {
+            assert_sid(&sid, "abc");
+            assert_eq!(inner.len(), 1);
+            assert_eq!(inner[0].0.len(), 0);
+            assert_sid(&inner[0].1, "d");
+        }
+        _ => panic!()
+    }
 }

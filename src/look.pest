@@ -91,3 +91,14 @@ actual_summand = { "|" ~ _pub? ~ sid ~ (product_anon_type | product_named_type |
 summand = { ((attribute+ ~ "{" ~ actual_summand ~ "}") | actual_summand ) }
 sum = { ((attribute+ ~ "{" ~ _pub? ~ summand+ ~ "}") | (_pub? ~ summand+)) }
 type_def = { sum | type_level_fun | _type }
+
+// Patterns
+summand_pattern = { "|" ~ sid ~ (product_named_pattern | product_anon_pattern | "") }
+maybe_annotated_named_pattern = { (attribute+ ~ "{" ~ sid ~ "=" ~ pattern ~ "}") | (sid ~ "=" ~ pattern) }
+product_named_pattern = { "(" ~ maybe_annotated_named_pattern ~ ("," ~ maybe_annotated_named_pattern)* ~ ")" }
+maybe_annotated_pattern = { (attribute+ ~ "{" ~ pattern ~ "}") | pattern }
+product_anon_pattern = { ("(" ~ ")") | ("(" ~ maybe_annotated_pattern ~ ("," ~ maybe_annotated_pattern)* ~ ")") }
+id_pattern = { _mut? ~ sid ~ (":" ~ _type)? }
+ptr_pattern = { "@" ~ pattern }
+blank_pattern = { "_" }
+pattern = { id_pattern | blank_pattern | literal | ptr_pattern | product_named_pattern | product_anon_pattern | summand_pattern }
