@@ -68,9 +68,9 @@ repetition = { bin_int | hex_int | dec_int | macro_invocation }
 // Types
 fun_named_type = { product_named_type ~ "->" ~ _type }
 fun_anon_type = { product_anon_type ~ "->" ~ _type }
-actual_named_product_field = { sid ~ ":" ~ _type }
-named_product_field = { (attribute+ ~ "{" ~ actual_named_product_field ~ "}") | actual_named_product_field }
-product_named_type = { "(" ~ named_product_field ~ ("," ~ named_product_field)* ~ ")" }
+actual_named_product_field_type = { sid ~ ":" ~ _type }
+named_product_field_type = { (attribute+ ~ "{" ~ actual_named_product_field_type ~ "}") | actual_named_product_field_type }
+product_named_type = { "(" ~ named_product_field_type ~ ("," ~ named_product_field_type)* ~ ")" }
 product_anon_type = { "(" ~ ( _type ~ ("," ~ _type)* | "") ~ ")" }
 product_repeated_type = { "(" ~ _type ~ ";" ~ repetition ~ ")" }
 array_type = { "[" ~ _type ~ "]" }
@@ -87,7 +87,7 @@ _type = { (attribute+ ~ "{" ~ actual_type ~ "}") | actual_type }
 type_level_arg = { (attribute+ ~ "{" ~ sid ~ "}") | sid }
 actual_type_level_fun = { "<" ~ type_level_arg ~ ("," ~ type_level_arg)* ~ ">" ~ "=>" ~ type_def }
 type_level_fun = { (attribute+ ~ "{" ~ actual_type_level_fun ~ "}") | actual_type_level_fun }
-actual_summand = { "|" ~ _pub? ~ sid ~ (product_anon_type | product_named_type | "") }
+actual_summand = { "|" ~ sid ~ (product_anon_type | product_named_type | "") }
 summand = { ((attribute+ ~ "{" ~ actual_summand ~ "}") | actual_summand ) }
 sum = { ((attribute+ ~ "{" ~ _pub? ~ summand+ ~ "}") | (_pub? ~ summand+)) }
 type_def = { sum | type_level_fun | _type }
@@ -102,3 +102,29 @@ id_pattern = { _mut? ~ sid ~ (":" ~ _type)? }
 ptr_pattern = { "@" ~ pattern }
 blank_pattern = { "_" }
 pattern = { id_pattern | blank_pattern | literal | ptr_pattern | product_named_pattern | product_anon_pattern | summand_pattern }
+
+// Not an expression, but used as part of many expressions
+block = { "{" ~ ((expression ~ (";" ~ expression)*) | "") ~ "}" }
+
+// Left recursive expressions
+cast_ = { "as" ~ _type }
+product_access_anon_ = { "." ~ literal }
+product_access_named_ = { "." ~ sid }
+array_index_ = { "[" ~ expression ~ "]" }
+deref_mut_ = { "~" }
+deref_ = { "@" }
+expression_ = { deref_ | deref_mut_ | array_index_ | product_access_named_ | product_access_anon_ | cast_ | product_anon_expression | product_named_expression | "" }
+
+// Expressions
+generic_expression = { "<" ~ type_level_arg ~ ("," ~ type_level_arg)* ~ ">" ~ "=>" ~ expression }
+fun_literal = { product_anon_pattern ~ "->" ~ _type ~ block }
+actual_named_product_field_expression = { sid ~ "=" ~ expression }
+named_product_field_expression = { (attribute+ ~ "{" ~ actual_named_product_field_expression ~ "}") | actual_named_product_field_expression }
+product_named_expression = { "(" ~ named_product_field_expression ~ ("," ~ named_product_field_expression)* ~ ")" }
+product_anon_expression = { "(" ~ ( expression ~ ("," ~ expression)* | "") ~ ")" }
+product_repeated_expression = { "(" ~ expression ~ ";" ~ repetition ~ ")" }
+array_expression = { "[" ~ expression ~ "]" }
+ref_expression = { "@" ~ expression }
+ref_mut_expression = { "~" ~ expression }
+lexpression = { literal | type_application_named | type_application_anon | id | macro_invocation | ref_expression | ref_mut_expression | array_expression | product_repeated_expression | fun_literal | product_anon_expression | product_named_expression | generic_expression }
+expression = { (attribute+ ~ "{" ~ lexpression ~ expression_ ~ "}") | (lexpression ~ expression_) }

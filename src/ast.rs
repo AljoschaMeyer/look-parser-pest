@@ -503,8 +503,8 @@ fn pair_to_named_type_arg<'i>(p: Pair<'i, Rule>) -> (Vec<Attribute<'i>>, SimpleI
     unreachable!()
 }
 
-fn pair_to_named_product_field<'i>(p: Pair<'i, Rule>) -> (Vec<Attribute<'i>>, SimpleIdentifier<'i>, Type<'i>) {
-    debug_assert!(p.as_rule() == Rule::named_product_field);
+fn pair_to_named_product_field_type<'i>(p: Pair<'i, Rule>) -> (Vec<Attribute<'i>>, SimpleIdentifier<'i>, Type<'i>) {
+    debug_assert!(p.as_rule() == Rule::named_product_field_type);
 
     let mut attrs = vec![];
 
@@ -514,7 +514,7 @@ fn pair_to_named_product_field<'i>(p: Pair<'i, Rule>) -> (Vec<Attribute<'i>>, Si
                 attrs.push(pair_to_attribute(pair));
             }
 
-            Rule::actual_named_product_field => {
+            Rule::actual_named_product_field_type => {
                 let mut pairs = pair.into_inner();
                 let sid = pair_to_simple_identifier(pairs.next().unwrap());
                 let _type = pair_to_type(pairs.next().unwrap());
@@ -585,7 +585,7 @@ fn pair_to_type<'i>(p: Pair<'i, Rule>) -> Type<'i> {
                     }
 
                     Rule::product_named_type => {
-                        let mut named_fields = pair.into_inner().map(pair_to_named_product_field).collect();
+                        let mut named_fields = pair.into_inner().map(pair_to_named_product_field_type).collect();
                         return Type::ProductNamed(attrs, named_fields, p);
                     }
 
@@ -598,7 +598,7 @@ fn pair_to_type<'i>(p: Pair<'i, Rule>) -> Type<'i> {
 
                     Rule::fun_named_type => {
                         let mut pairs = pair.into_inner();
-                        let mut args = pairs.next().unwrap().into_inner().map(pair_to_named_product_field).collect();
+                        let mut args = pairs.next().unwrap().into_inner().map(pair_to_named_product_field_type).collect();
                         let return_type = pair_to_type(pairs.next().unwrap());
                         return Type::FunNamed(attrs, args, Box::new(return_type), p);
                     }
@@ -946,11 +946,10 @@ fn test_type() {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-// Bool is whether the fields are public
 pub enum Summand<'i> {
-    Empty(bool, SimpleIdentifier<'i>, Pair<'i, Rule>),
-    Anon(bool, SimpleIdentifier<'i>,  Vec<Type<'i>>, Pair<'i, Rule>),
-    Named(bool, SimpleIdentifier<'i>, Vec<(Vec<Attribute<'i>>, SimpleIdentifier<'i>, Type<'i>)>, Pair<'i, Rule>),
+    Empty(SimpleIdentifier<'i>, Pair<'i, Rule>),
+    Anon(SimpleIdentifier<'i>,  Vec<Type<'i>>, Pair<'i, Rule>),
+    Named(SimpleIdentifier<'i>, Vec<(Vec<Attribute<'i>>, SimpleIdentifier<'i>, Type<'i>)>, Pair<'i, Rule>),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -988,25 +987,20 @@ fn pair_to_actual_summand<'i>(p: Pair<'i, Rule>) -> Summand<'i> {
     assert!(p.as_rule() == Rule::actual_summand);
 
     let mut pairs = p.clone().into_inner().peekable();
-    let public = pairs.peek().unwrap().as_rule() == Rule::_pub;
-
-    if public {
-        pairs.next();
-    }
 
     let sid = pair_to_simple_identifier(pairs.next().unwrap());
 
     match pairs.next() {
-        None => Summand::Empty(public, sid, p),
+        None => Summand::Empty(sid, p),
 
         Some(pair) => {
             match pair.as_rule() {
                 Rule::product_anon_type => {
-                    Summand::Anon(public, sid, pair.into_inner().map(pair_to_type).collect(), p)
+                    Summand::Anon(sid, pair.into_inner().map(pair_to_type).collect(), p)
                 }
 
                 Rule::product_named_type => {
-                    Summand::Named(public, sid, pair.into_inner().map(pair_to_named_product_field).collect(), p)
+                    Summand::Named(sid, pair.into_inner().map(pair_to_named_product_field_type).collect(), p)
                 }
 
                 _ => unreachable!()
@@ -1197,8 +1191,7 @@ fn test_type_def() {
             assert_eq!(summands.len(), 1);
             assert_eq!(summands[0].0, &[][..]);
             match summands[0].1 {
-                Summand::Empty(public, ref sid, _) => {
-                    assert!(!public);
+                Summand::Empty(ref sid, _) => {
                     assert_sid(sid, "A");
                 }
                 _ => panic!()
@@ -1214,8 +1207,7 @@ fn test_type_def() {
             assert_eq!(summands.len(), 1);
             assert_eq!(summands[0].0, &[][..]);
             match summands[0].1 {
-                Summand::Empty(public, ref sid, _) => {
-                    assert!(!public);
+                Summand::Empty(ref sid, _) => {
                     assert_sid(sid, "A");
                 }
                 _ => panic!()
@@ -1224,7 +1216,6 @@ fn test_type_def() {
         _ => panic!()
     }
 
-
     match p_type_def("#[foo] { pub | A }").unwrap() {
         TypeDef::Sum(public, attrs, summands, _) => {
             assert!(public);
@@ -1232,8 +1223,7 @@ fn test_type_def() {
             assert_eq!(summands.len(), 1);
             assert_eq!(summands[0].0, &[][..]);
             match summands[0].1 {
-                Summand::Empty(public, ref sid, _) => {
-                    assert!(!public);
+                Summand::Empty(ref sid, _) => {
                     assert_sid(sid, "A");
                 }
                 _ => panic!()
@@ -1249,25 +1239,7 @@ fn test_type_def() {
             assert_eq!(summands.len(), 1);
             assert_eq!(summands[0].0.len(), 1);
             match summands[0].1 {
-                Summand::Empty(public, ref sid, _) => {
-                    assert!(!public);
-                    assert_sid(sid, "A");
-                }
-                _ => panic!()
-            }
-        }
-        _ => panic!()
-    }
-
-    match p_type_def("| pub A").unwrap() {
-        TypeDef::Sum(public, attrs, summands, _) => {
-            assert!(!public);
-            assert_eq!(attrs, &[][..]);
-            assert_eq!(summands.len(), 1);
-            assert_eq!(summands[0].0, &[][..]);
-            match summands[0].1 {
-                Summand::Empty(public, ref sid, _) => {
-                    assert!(public);
+                Summand::Empty(ref sid, _) => {
                     assert_sid(sid, "A");
                 }
                 _ => panic!()
@@ -1283,16 +1255,14 @@ fn test_type_def() {
             assert_eq!(summands.len(), 2);
             assert_eq!(summands[0].0, &[][..]);
             match summands[0].1 {
-                Summand::Empty(public, ref sid, _) => {
-                    assert!(!public);
+                Summand::Empty(ref sid, _) => {
                     assert_sid(sid, "A");
                 }
                 _ => panic!()
             }
             assert_eq!(summands[1].0, &[][..]);
             match summands[1].1 {
-                Summand::Empty(public, ref sid, _) => {
-                    assert!(!public);
+                Summand::Empty(ref sid, _) => {
                     assert_sid(sid, "B");
                 }
                 _ => panic!()
@@ -1308,8 +1278,7 @@ fn test_type_def() {
             assert_eq!(summands.len(), 1);
             assert_eq!(summands[0].0, &[][..]);
             match summands[0].1 {
-                Summand::Anon(public, ref sid, ref types, _) => {
-                    assert!(!public);
+                Summand::Anon( ref sid, ref types, _) => {
                     assert_sid(sid, "A");
                     assert_eq!(types.len(), 1);
                     assert_sid_type(&types[0], "B");
@@ -1327,8 +1296,7 @@ fn test_type_def() {
             assert_eq!(summands.len(), 1);
             assert_eq!(summands[0].0, &[][..]);
             match summands[0].1 {
-                Summand::Named(public, ref sid, ref args, _) => {
-                    assert!(!public);
+                Summand::Named(ref sid, ref args, _) => {
                     assert_sid(sid, "A");
                     assert_eq!(args.len(), 1);
                 }
@@ -1621,6 +1589,594 @@ fn test_pattern() {
             assert_eq!(inner.len(), 1);
             assert_eq!(inner[0].0.len(), 0);
             assert_sid(&inner[0].1, "d");
+        }
+        _ => panic!()
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Expression<'i> {
+    Id(Vec<Attribute<'i>>, Identifier<'i>, Pair<'i, Rule>),
+    Literal(Vec<Attribute<'i>>, Literal<'i>, Pair<'i, Rule>),
+    MacroInv(Vec<Attribute<'i>>, MacroInvocation<'i>, Pair<'i, Rule>),
+    Ref(Vec<Attribute<'i>>, Box<Expression<'i>>, Pair<'i, Rule>),
+    RefMut(Vec<Attribute<'i>>, Box<Expression<'i>>, Pair<'i, Rule>),
+    Deref(Vec<Attribute<'i>>, Box<Expression<'i>>, Pair<'i, Rule>),
+    DerefMut(Vec<Attribute<'i>>, Box<Expression<'i>>, Pair<'i, Rule>),
+    Array(Vec<Attribute<'i>>, Box<Expression<'i>>, Pair<'i, Rule>),
+    ArrayIndex(Vec<Attribute<'i>>, Box<Expression<'i>>, Box<Expression<'i>>, Pair<'i, Rule>),
+    ProductRepeated(Vec<Attribute<'i>>, Box<Expression<'i>>, Repetition<'i>, Pair<'i, Rule>),
+    ProductAnon(Vec<Attribute<'i>>, Vec<Expression<'i>>, Pair<'i, Rule>),
+    ProductNamed(Vec<Attribute<'i>>, Vec<(Vec<Attribute<'i>>, SimpleIdentifier<'i>, Expression<'i>)>, Pair<'i, Rule>),
+    ProductAccessAnon(Vec<Attribute<'i>>, Box<Expression<'i>>, Literal<'i>, Pair<'i, Rule>),
+    ProductAccessNamed(Vec<Attribute<'i>>, Box<Expression<'i>>, SimpleIdentifier<'i>, Pair<'i, Rule>),
+    FunLiteral(Vec<Attribute<'i>>, Vec<(Vec<Attribute<'i>>, Pattern<'i>)>, Type<'i>, Vec<Expression<'i>>, Pair<'i, Rule>),
+    FunApplicationAnon(Vec<Attribute<'i>>, Box<Expression<'i>>, Vec<Expression<'i>>, Pair<'i, Rule>),
+    FunApplicationNamed(Vec<Attribute<'i>>, Box<Expression<'i>>, Vec<(Vec<Attribute<'i>>, SimpleIdentifier<'i>, Expression<'i>)>, Pair<'i, Rule>),
+    Generic(Vec<Attribute<'i>>, Vec<(Vec<Attribute<'i>>, SimpleIdentifier<'i>)>, Box<Expression<'i>>, Pair<'i, Rule>),
+    TypeApplicationAnon(Vec<Attribute<'i>>, Identifier<'i>, Vec<Type<'i>>, Pair<'i, Rule>),
+    TypeApplicationNamed(Vec<Attribute<'i>>,
+                         Identifier<'i>,
+                         Vec<(Vec<Attribute<'i>>, SimpleIdentifier<'i>, Type<'i>)>,
+                         Pair<'i, Rule>),
+    Cast(Vec<Attribute<'i>>, Box<Expression<'i>>, Type<'i>, Pair<'i, Rule>),
+}
+
+impl<'i> Expression<'i> {
+    pub fn attributes(&self) -> &Vec<Attribute> {
+        match self {
+            &Expression::Id(ref attrs, _, _) => attrs,
+            &Expression::Literal(ref attrs, _, _) => attrs,
+            &Expression::MacroInv(ref attrs, _, _) => attrs,
+            &Expression::Ref(ref attrs, _, _) => attrs,
+            &Expression::RefMut(ref attrs, _, _) => attrs,
+            &Expression::Deref(ref attrs, _, _) => attrs,
+            &Expression::DerefMut(ref attrs, _, _) => attrs,
+            &Expression::Array(ref attrs, _, _) => attrs,
+            &Expression::ArrayIndex(ref attrs, _, _, _) => attrs,
+            &Expression::ProductRepeated(ref attrs, _, _, _) => attrs,
+            &Expression::ProductAnon(ref attrs, _, _) => attrs,
+            &Expression::ProductNamed(ref attrs, _, _) => attrs,
+            &Expression::ProductAccessAnon(ref attrs, _, _, _) => attrs,
+            &Expression::ProductAccessNamed(ref attrs, _, _, _) => attrs,
+            &Expression::FunLiteral(ref attrs, _, _, _, _) => attrs,
+            &Expression::FunApplicationAnon(ref attrs, _, _, _) => attrs,
+            &Expression::FunApplicationNamed(ref attrs, _, _, _) => attrs,
+            &Expression::Generic(ref attrs, _, _, _) => attrs,
+            &Expression::TypeApplicationAnon(ref attrs, _, _, _) => attrs,
+            &Expression::TypeApplicationNamed(ref attrs, _, _, _) => attrs,
+            &Expression::Cast(ref attrs, _, _, _) => attrs,
+        }
+    }
+}
+
+fn pair_to_named_product_field_expression<'i>(p: Pair<'i, Rule>) -> (Vec<Attribute<'i>>, SimpleIdentifier<'i>, Expression<'i>) {
+    debug_assert!(p.as_rule() == Rule::named_product_field_expression);
+
+    let mut attrs = vec![];
+
+    for pair in p.into_inner() {
+        match pair.as_rule() {
+            Rule::attribute => {
+                attrs.push(pair_to_attribute(pair));
+            }
+
+            Rule::actual_named_product_field_expression => {
+                let mut pairs = pair.into_inner();
+                let sid = pair_to_simple_identifier(pairs.next().unwrap());
+                let _type = pair_to_expression(pairs.next().unwrap());
+                return (attrs, sid, _type)
+            }
+
+            _ => unreachable!()
+        }
+    }
+
+    unreachable!()
+}
+
+fn pair_to_block<'i>(p: Pair<'i, Rule>) -> Vec<Expression<'i>> {
+    debug_assert!(p.as_rule() == Rule::block);
+    p.into_inner().map(pair_to_expression).collect()
+}
+
+fn pair_to_expression<'i>(p: Pair<'i, Rule>) -> Expression<'i> {
+    debug_assert!(p.as_rule() == Rule::expression);
+
+    let mut attrs = vec![];
+    let mut exp = None;
+    let mut pairs = p.clone().into_inner().peekable();
+
+    while let Some(pair) = pairs.next() {
+        match pair.as_rule() {
+            Rule::attribute => {
+                attrs.push(pair_to_attribute(pair));
+            }
+
+            Rule::lexpression => {
+                let pair = pair.into_inner().next().unwrap();
+                match pair.as_rule() {
+                    Rule::id => {
+                        exp = Some(Expression::Id(vec![], pair_to_identifier(pair), p.clone()));
+                        break;
+                    }
+
+                    Rule::literal => {
+                        exp = Some(Expression::Literal(vec![], pair_to_literal(pair), p.clone()));
+                        break;
+                    }
+
+                    Rule::macro_invocation => {
+                        exp = Some(Expression::MacroInv(vec![], pair_to_macro_invocation(pair), p.clone()));
+                        break;
+                    }
+
+                    Rule::ref_expression => {
+                        exp = Some(Expression::Ref(vec![], Box::new(pair_to_expression(pair.into_inner().next().unwrap())), p.clone()));
+                        break;
+                    }
+
+                    Rule::ref_mut_expression => {
+                        exp = Some(Expression::RefMut(vec![], Box::new(pair_to_expression(pair.into_inner().next().unwrap())), p.clone()));
+                        break;
+                    }
+
+                    Rule::array_expression => {
+                        exp = Some(Expression::Array(vec![], Box::new(pair_to_expression(pair.into_inner().next().unwrap())), p.clone()));
+                        break;
+                    }
+
+                    Rule::product_repeated_expression => {
+                        let mut pairs = pair.into_inner();
+                        exp = Some(Expression::ProductRepeated(vec![], Box::new(pair_to_expression(pairs.next().unwrap())), pair_to_repetition(pairs.next().unwrap()), p.clone()));
+                        break;
+                    }
+
+                    Rule::product_anon_expression => {
+                        return Expression::ProductAnon(attrs, pair.into_inner().map(pair_to_expression).collect(), p);
+                    }
+
+                    Rule::product_named_expression => {
+                        let mut named_fields = pair.into_inner().map(pair_to_named_product_field_expression).collect();
+                        return Expression::ProductNamed(attrs, named_fields, p);
+                    }
+
+                    Rule::fun_literal => {
+                        let mut pairs = pair.into_inner();
+                        let args = pairs.next().unwrap().into_inner().map(pair_to_annotated_pattern).collect();
+                        let return_type = pair_to_type(pairs.next().unwrap());
+                        let body = pair_to_block(pairs.next().unwrap());
+                        return Expression::FunLiteral(attrs, args, return_type, body, p);
+                    }
+
+                    Rule::generic_expression => {
+                        let mut args = vec![];
+
+                        for pair in pair.into_inner() {
+                            match pair.as_rule() {
+                                Rule::type_level_arg => {
+                                    args.push(pair_to_type_level_arg(pair));
+                                }
+
+                                Rule::expression => {
+                                    return Expression::Generic(attrs, args, Box::new(pair_to_expression(pair)), p);
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+                        unreachable!()
+                    }
+
+                    Rule::type_application_anon => {
+                        let mut pairs = pair.into_inner();
+                        let id = pair_to_identifier(pairs.next().unwrap());
+                        let mut args = pairs.map(pair_to_type).collect();
+                        return Expression::TypeApplicationAnon(attrs, id, args, p);
+                    }
+
+                    Rule::type_application_named => {
+                        let mut pairs = pair.into_inner();
+                        let id = pair_to_identifier(pairs.next().unwrap());
+                        let mut named_type_args = pairs.map(pair_to_named_type_arg).collect();
+                        return Expression::TypeApplicationNamed(attrs, id, named_type_args, p);
+                    }
+
+                    _ => unreachable!()
+                }
+            }
+            _ => unreachable!()
+        }
+    };
+
+    let pair = pairs.next().unwrap();
+    debug_assert!(pair.as_rule() == Rule::expression_);
+
+    match pair.into_inner().next() {
+        Some(pair) => {
+            match pair.as_rule() {
+                Rule::deref_ => {
+                    return Expression::Deref(attrs, Box::new(exp.unwrap()), p);
+                }
+
+                Rule::deref_mut_ => {
+                    return Expression::DerefMut(attrs, Box::new(exp.unwrap()), p);
+                }
+
+                Rule::array_index_ => {
+                    return Expression::ArrayIndex(attrs, Box::new(exp.unwrap()), Box::new(pair_to_expression(pair.into_inner().next().unwrap())), p);
+                }
+
+                Rule::product_access_named_ => {
+                    return Expression::ProductAccessNamed(attrs, Box::new(exp.unwrap()), pair_to_simple_identifier(pair.into_inner().next().unwrap()), p);
+                }
+
+                Rule::product_access_anon_ => {
+                    return Expression::ProductAccessAnon(attrs, Box::new(exp.unwrap()), pair_to_literal(pair.into_inner().next().unwrap()), p);
+                }
+
+                Rule::product_anon_expression => {
+                    return Expression::FunApplicationAnon(attrs, Box::new(exp.unwrap()), pair.into_inner().map(pair_to_expression).collect(), p);
+                }
+
+                Rule::product_named_expression => {
+                    return Expression::FunApplicationNamed(attrs, Box::new(exp.unwrap()), pair.into_inner().map(pair_to_named_product_field_expression).collect(), p);
+                }
+
+                Rule::cast_ => {
+                    return Expression::Cast(attrs, Box::new(exp.unwrap()), pair_to_type(pair.into_inner().next().unwrap()), p);
+                }
+
+                _ => unreachable!()
+            }
+        }
+
+        None => {
+            match exp.unwrap() {
+                Expression::Id(_, id, pair) => Expression::Id(attrs, id, pair),
+                Expression::Literal(_, lit, pair) => Expression::Literal(attrs, lit, pair),
+                Expression::MacroInv(_, inv, pair) => Expression::MacroInv(attrs, inv, pair),
+                Expression::Ref(_, inner, pair) => Expression::Ref(attrs, inner, pair),
+                Expression::RefMut(_, inner, pair) => Expression::RefMut(attrs, inner, pair),
+                Expression::Array(_, inner, pair) => Expression::Array(attrs, inner, pair),
+                Expression::ProductRepeated(_, inner, repetition, pair) => Expression::ProductRepeated(attrs, inner, repetition, pair),
+                Expression::ProductAnon(_, inners, pair) => Expression::ProductAnon(attrs, inners, pair),
+                Expression::ProductNamed(_, inners, pair) => Expression::ProductNamed(attrs, inners, pair),
+                Expression::FunLiteral(_, args, return_type, body, pair) => Expression::FunLiteral(attrs, args, return_type, body, pair),
+                Expression::Generic(_, args, exp, pair) => Expression::Generic(attrs, args, exp, pair),
+                Expression::TypeApplicationAnon(_, id, args, pair) => Expression::TypeApplicationAnon(attrs, id, args, pair),
+                Expression::TypeApplicationNamed(_, id, args, pair) => Expression::TypeApplicationNamed(attrs, id, args, pair),
+                _ => unreachable!()
+            }
+        }
+    }
+}
+
+pub fn p_expression<'i>(input: &'i str) -> PestResult<Expression<'i>> {
+    LookParser::parse(Rule::expression, input).map(|mut pairs| pair_to_expression(pairs.next().unwrap()))
+}
+
+#[cfg(test)]
+fn assert_sid_expression(t: &Expression, expected: &str) {
+    match t {
+        &Expression::Id(_, ref id, _) => {
+            assert_eq!(id.0[0].as_str(), expected);
+        }
+        _ => panic!(),
+    }
+}
+
+#[test]
+fn test_expression() {
+    assert_sid_expression(&p_expression("abc").unwrap(), "abc");
+
+    let t = p_expression("#[foo]{abc}").unwrap();
+    assert_sid_attr(&t.attributes()[0], "foo");
+    assert_sid_expression(&t, "abc");
+
+    let t = p_expression("#[foo]#[bar]{abc}").unwrap();
+    assert_sid_attr(&t.attributes()[0], "foo");
+    assert_sid_attr(&t.attributes()[1], "bar");
+    assert_sid_expression(&t, "abc");
+
+    match p_expression("42").unwrap() {
+        Expression::Literal(_, Literal::Int(int, _), _) => assert_eq!(int, 42),
+        _ => panic!()
+    }
+
+    match p_expression("12.34").unwrap() {
+        Expression::Literal(_, Literal::Float(float, _), _) => assert_eq!(float, 12.34),
+        _ => panic!()
+    }
+
+    match p_expression("\"\"").unwrap() {
+        Expression::Literal(_, Literal::String(string, _), _) => assert_eq!(string, ""),
+        _ => panic!()
+    }
+
+    match p_expression("$abc()").unwrap() {
+        Expression::MacroInv(attrs, MacroInvocation(id, _, _), _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_eq!(id.0[0].as_str(), "abc");
+        }
+        _ => panic!(),
+    }
+
+    match p_expression("@abc").unwrap() {
+        Expression::Ref(attrs, inner, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_expression(inner.as_ref(), "abc");
+        }
+        _ => panic!()
+    }
+
+    match p_expression("~abc").unwrap() {
+        Expression::RefMut(attrs, inner, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_expression(inner.as_ref(), "abc");
+        }
+        _ => panic!()
+    }
+
+    match p_expression("abc@").unwrap() {
+        Expression::Deref(attrs, inner, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_expression(inner.as_ref(), "abc");
+        }
+        _ => panic!()
+    }
+
+    match p_expression("abc~").unwrap() {
+        Expression::DerefMut(attrs, inner, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_expression(inner.as_ref(), "abc");
+        }
+        _ => panic!()
+    }
+
+    match p_expression("[abc]").unwrap() {
+        Expression::Array(attrs, inner, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_expression(inner.as_ref(), "abc");
+        }
+        _ => panic!()
+    }
+
+    match p_expression("abc[def]").unwrap() {
+        Expression::ArrayIndex(attrs, arr, index, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_expression(arr.as_ref(), "abc");
+            assert_sid_expression(index.as_ref(), "def");
+        }
+        _ => panic!()
+    }
+
+    match p_expression("(abc; 42)").unwrap() {
+        Expression::ProductRepeated(attrs, inner, Repetition::Literal(42, _), _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_expression(inner.as_ref(), "abc");
+        }
+        _ => panic!()
+    }
+
+    match p_expression("()").unwrap() {
+        Expression::ProductAnon(attrs, expressions, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_eq!(expressions, &[][..]);
+        }
+        _ => panic!(),
+    }
+
+    match p_expression("(abc)").unwrap() {
+        Expression::ProductAnon(attrs, expressions, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_expression(&expressions[0], "abc");
+        }
+        _ => panic!(),
+    }
+
+    match p_expression("(abc, def)").unwrap() {
+        Expression::ProductAnon(attrs, expressions, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_expression(&expressions[0], "abc");
+            assert_sid_expression(&expressions[1], "def");
+        }
+        _ => panic!(),
+    }
+
+    match p_expression("(abc = def)").unwrap() {
+        Expression::ProductNamed(attrs, triples, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_eq!(triples[0].0, &[][..]);
+            assert_sid(&triples[0].1, "abc");
+            assert_sid_expression(&triples[0].2, "def");
+        }
+        _ => panic!(),
+    }
+
+    match p_expression("(abc = def, ghi = jkl)").unwrap() {
+        Expression::ProductNamed(attrs, triples, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_eq!(triples[0].0, &[][..]);
+            assert_sid(&triples[0].1, "abc");
+            assert_sid_expression(&triples[0].2, "def");
+            assert_eq!(triples[1].0, &[][..]);
+            assert_sid(&triples[1].1, "ghi");
+            assert_sid_expression(&triples[1].2, "jkl");
+        }
+        _ => panic!(),
+    }
+
+    match p_expression("(#[foo]{abc = def})").unwrap() {
+        Expression::ProductNamed(attrs, triples, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_attr(&triples[0].0[0], "foo");
+            assert_sid(&triples[0].1, "abc");
+            assert_sid_expression(&triples[0].2, "def");
+        }
+        _ => panic!(),
+    }
+
+    match p_expression("(#[foo]#[bar]{abc = def})").unwrap() {
+        Expression::ProductNamed(attrs, triples, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_attr(&triples[0].0[0], "foo");
+            assert_sid_attr(&triples[0].0[1], "bar");
+            assert_sid(&triples[0].1, "abc");
+            assert_sid_expression(&triples[0].2, "def");
+        }
+        _ => panic!(),
+    }
+
+    match p_expression("abc.def").unwrap() {
+        Expression::ProductAccessNamed(attrs, accessee, field, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_expression(&accessee, "abc");
+            assert_sid(&field, "def");
+        }
+        _ => panic!()
+    }
+
+    match p_expression("abc.0").unwrap() {
+        Expression::ProductAccessAnon(attrs, accessee, Literal::Int(0, _), _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_expression(&accessee, "abc");
+        }
+        _ => panic!()
+    }
+
+    match p_expression("() -> xyz {}").unwrap() {
+        Expression::FunLiteral(attrs, args, return_type, body, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_eq!(args, &[][..]);
+            assert_sid_type(&return_type, "xyz");
+            assert_eq!(body, &[][..]);
+        }
+        _ => panic!(),
+    }
+
+    match p_expression("abc()").unwrap() {
+        Expression::FunApplicationAnon(attrs, fun, args, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_expression(&fun, "abc");
+            assert_eq!(args, &[][..]);
+        }
+        _ => panic!()
+    }
+
+    match p_expression("abc(def = ghi)").unwrap() {
+        Expression::FunApplicationNamed(attrs, fun, args, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_expression(&fun, "abc");
+            assert_eq!(args[0].0, &[][..]);
+            assert_sid(&args[0].1, "def");
+            assert_sid_expression(&args[0].2, "ghi");
+        }
+        _ => panic!()
+    }
+
+    match p_expression("<abc> => xyz").unwrap() {
+        Expression::Generic(attrs, args, exp, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_eq!(args[0].0, &[][..]);
+            assert_sid(&args[0].1, "abc");
+            assert_sid_expression(&exp, "xyz");
+        }
+        _ => panic!()
+    }
+
+    match p_expression("<abc, def> => xyz").unwrap() {
+        Expression::Generic(attrs, args, exp, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_eq!(args[0].0, &[][..]);
+            assert_sid(&args[0].1, "abc");
+            assert_eq!(args[1].0, &[][..]);
+            assert_sid(&args[1].1, "def");
+            assert_sid_expression(&exp, "xyz");
+        }
+        _ => panic!()
+    }
+
+    match p_expression("xyz<abc>").unwrap() {
+        Expression::TypeApplicationAnon(attrs, id, args, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_id(&id, "xyz");
+            assert_sid_type(&args[0], "abc");
+        }
+        _ => panic!(),
+    }
+
+    match p_expression("xyz<abc, def>").unwrap() {
+        Expression::TypeApplicationAnon(attrs, id, args, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_id(&id, "xyz");
+            assert_sid_type(&args[0], "abc");
+            assert_sid_type(&args[1], "def");
+        }
+        _ => panic!(),
+    }
+
+    match p_expression("xyz<abc = def>").unwrap() {
+        Expression::TypeApplicationNamed(attrs, id, triples, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_id(&id, "xyz");
+            assert_eq!(triples[0].0, &[][..]);
+            assert_sid(&triples[0].1, "abc");
+            assert_sid_type(&triples[0].2, "def");
+        }
+        _ => panic!(),
+    }
+
+    match p_expression("xyz<abc = def, ghi = jkl>").unwrap() {
+        Expression::TypeApplicationNamed(attrs, id, triples, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_id(&id, "xyz");
+            assert_eq!(triples[0].0, &[][..]);
+            assert_sid(&triples[0].1, "abc");
+            assert_sid_type(&triples[0].2, "def");
+            assert_eq!(triples[1].0, &[][..]);
+            assert_sid(&triples[1].1, "ghi");
+            assert_sid_type(&triples[1].2, "jkl");
+        }
+        _ => panic!(),
+    }
+
+    match p_expression("xyz<#[foo]{abc}>").unwrap() {
+        Expression::TypeApplicationAnon(attrs, id, args, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_id(&id, "xyz");
+            assert_sid_type(&args[0], "abc");
+        }
+        _ => panic!(),
+    }
+
+    match p_expression("xyz<#[foo]{abc = def}>").unwrap() {
+        Expression::TypeApplicationNamed(attrs, id, triples, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_id(&id, "xyz");
+            assert_sid_attr(&triples[0].0[0], "foo");
+            assert_sid(&triples[0].1, "abc");
+            assert_sid_type(&triples[0].2, "def");
+        }
+        _ => panic!(),
+    }
+
+    match p_expression("xyz<#[foo]#[bar]{abc = def}>").unwrap() {
+        Expression::TypeApplicationNamed(attrs, id, triples, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_id(&id, "xyz");
+            assert_sid_attr(&triples[0].0[0], "foo");
+            assert_sid_attr(&triples[0].0[1], "bar");
+            assert_sid(&triples[0].1, "abc");
+            assert_sid_type(&triples[0].2, "def");
+        }
+        _ => panic!(),
+    }
+
+    match p_expression("abc as def").unwrap() {
+        Expression::Cast(attrs, exp, the_type, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_expression(&exp, "abc");
+            assert_sid_type(&the_type, "def");
         }
         _ => panic!()
     }
