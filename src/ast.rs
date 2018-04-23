@@ -8,7 +8,7 @@ use super::{Rule, LookParser, unescape::unescape};
 
 pub type PestResult<'i, N> = Result<N, Error<'i, Rule>>;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SimpleIdentifier<'i>(pub Span<'i>);
 
 impl<'i> SimpleIdentifier<'i> {
@@ -44,7 +44,7 @@ fn test_sid() {
     assert!(p_sid("mod").is_err());
     assert!(p_sid("self").is_err());
     assert!(p_sid("super").is_err());
-    assert!(p_sid("deps").is_err());
+    assert!(p_sid("dep").is_err());
     assert!(p_sid("magic").is_err());
     assert!(p_sid("goto").is_err());
     assert!(p_sid("label").is_err());
@@ -60,9 +60,10 @@ fn test_sid() {
     assert!(p_sid("macro").is_err());
     assert!(p_sid("mut").is_err());
     assert!(p_sid("pub").is_err());
+    assert!(p_sid("ffi").is_err());
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Identifier<'i>(pub Vec<SimpleIdentifier<'i>>, pub Pair<'i, Rule>);
 
 fn pair_to_identifier<'i>(pair: Pair<'i, Rule>) -> Identifier<'i> {
@@ -101,7 +102,7 @@ fn test_id() {
     assert!(id_iter.next().is_none());
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Literal<'i> {
     Int(u64, Pair<'i, Rule>),
     Float(f64, Pair<'i, Rule>),
@@ -217,7 +218,7 @@ fn test_literal() {
     test_string_lit(r#""\u09AF""#, "\u{09AF}");
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum MetaItem<'i> {
     Nullary(SimpleIdentifier<'i>, Pair<'i, Rule>),
     Pair(SimpleIdentifier<'i>, Literal<'i>, Pair<'i, Rule>),
@@ -307,7 +308,7 @@ fn test_meta_item() {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Attribute<'i>(MetaItem<'i>, Pair<'i, Rule>);
 
 fn pair_to_attribute<'i>(p: Pair<'i, Rule>) -> Attribute<'i> {
@@ -961,7 +962,7 @@ pub enum TypeDef<'i> {
 }
 
 fn pair_to_type_level_arg<'i>(p: Pair<'i, Rule>) -> (Vec<Attribute<'i>>, SimpleIdentifier<'i>) {
-    assert!(p.as_rule() == Rule::type_level_arg);
+    debug_assert!(p.as_rule() == Rule::type_level_arg);
 
     let mut attrs = vec![];
 
@@ -983,7 +984,7 @@ fn pair_to_type_level_arg<'i>(p: Pair<'i, Rule>) -> (Vec<Attribute<'i>>, SimpleI
 }
 
 fn pair_to_actual_summand<'i>(p: Pair<'i, Rule>) -> Summand<'i> {
-    assert!(p.as_rule() == Rule::actual_summand);
+    debug_assert!(p.as_rule() == Rule::actual_summand);
 
     let mut pairs = p.clone().into_inner().peekable();
 
@@ -1009,7 +1010,7 @@ fn pair_to_actual_summand<'i>(p: Pair<'i, Rule>) -> Summand<'i> {
 }
 
 fn pair_to_summand<'i>(p: Pair<'i, Rule>) -> (Vec<Attribute<'i>>, Summand<'i>) {
-    assert!(p.as_rule() == Rule::summand);
+    debug_assert!(p.as_rule() == Rule::summand);
 
     let mut attrs = vec![];
 
@@ -1620,7 +1621,7 @@ pub enum Expression<'i> {
                          Pair<'i, Rule>),
     Cast(Vec<Attribute<'i>>, Box<Expression<'i>>, Type<'i>, Pair<'i, Rule>),
     Assignment(Vec<Attribute<'i>>, Box<Expression<'i>>, Box<Expression<'i>>, Pair<'i, Rule>),
-    Val(Vec<Attribute<'i>>, SimpleIdentifier<'i>, Option<Box<Expression<'i>>>, Pair<'i, Rule>),
+    Val(Vec<Attribute<'i>>, Pattern<'i>, Option<Box<Expression<'i>>>, Pair<'i, Rule>),
     // If(Vec<Attribute<'i>>, Box<Expression<'i>>, Vec<Expression<'i>>, Option<Vec<Expression<'i>>>, Pair<'i, Rule>),
     Case(Vec<Attribute<'i>>, Box<Expression<'i>>, Vec<(Pattern<'i>, Vec<Expression<'i>>)>, Pair<'i, Rule>),
     Loop(Vec<Attribute<'i>>, Box<Expression<'i>>, Vec<(Pattern<'i>, Vec<Expression<'i>>)>, Pair<'i, Rule>),
@@ -1825,16 +1826,16 @@ fn pair_to_expression<'i>(p: Pair<'i, Rule>) -> Expression<'i> {
 
                     Rule::val_expression => {
                         let mut pairs = pair.into_inner();
-                        assert_eq!(pairs.next().unwrap().as_rule(), Rule::_val);
-                        let sid = pair_to_simple_identifier(pairs.next().unwrap());
+                        debug_assert!(pairs.next().unwrap().as_rule() == Rule::_val);
+                        let pattern = pair_to_pattern(pairs.next().unwrap());
 
                         match pairs.next() {
                             Some(pair) => {
-                                exp = Some(Expression::Val(vec![], sid, Some(Box::new(pair_to_expression(pair))), p.clone()));
+                                exp = Some(Expression::Val(vec![], pattern, Some(Box::new(pair_to_expression(pair))), p.clone()));
                                 break;
                             }
                             None => {
-                                exp = Some(Expression::Val(vec![], sid, None, p.clone()));
+                                exp = Some(Expression::Val(vec![], pattern, None, p.clone()));
                                 break;
                             }
                         }
@@ -1847,7 +1848,7 @@ fn pair_to_expression<'i>(p: Pair<'i, Rule>) -> Expression<'i> {
 
                     Rule::case_expression => {
                         let mut pairs = pair.into_inner();
-                        assert_eq!(pairs.next().unwrap().as_rule(), Rule::_case);
+                        debug_assert!(pairs.next().unwrap().as_rule() == Rule::_case);
                         let matcher = pair_to_expression(pairs.next().unwrap());
 
                         let mut branches = vec![];
@@ -1861,7 +1862,7 @@ fn pair_to_expression<'i>(p: Pair<'i, Rule>) -> Expression<'i> {
 
                     Rule::loop_expression => {
                         let mut pairs = pair.into_inner();
-                        assert_eq!(pairs.next().unwrap().as_rule(), Rule::_loop);
+                        debug_assert!(pairs.next().unwrap().as_rule() == Rule::_loop);
                         let matcher = pair_to_expression(pairs.next().unwrap());
 
                         let mut branches = vec![];
@@ -1875,7 +1876,7 @@ fn pair_to_expression<'i>(p: Pair<'i, Rule>) -> Expression<'i> {
 
                     Rule::return_expression => {
                         let mut pairs = pair.into_inner();
-                        assert_eq!(pairs.next().unwrap().as_rule(), Rule::_return);
+                        debug_assert!(pairs.next().unwrap().as_rule() == Rule::_return);
 
                         match pairs.next() {
                             Some(pair) => {
@@ -1891,7 +1892,7 @@ fn pair_to_expression<'i>(p: Pair<'i, Rule>) -> Expression<'i> {
 
                     Rule::break_expression => {
                         let mut pairs = pair.into_inner();
-                        assert_eq!(pairs.next().unwrap().as_rule(), Rule::_break);
+                        debug_assert!(pairs.next().unwrap().as_rule() == Rule::_break);
 
                         match pairs.next() {
                             Some(pair) => {
@@ -2324,19 +2325,17 @@ fn test_expression() {
         _ => panic!()
     }
 
-    match p_expression("val abc").unwrap() {
-        Expression::Val(attrs, sid, rhs, _) => {
+    match p_expression("val _").unwrap() {
+        Expression::Val(attrs, Pattern::Blank(_), rhs, _) => {
             assert_eq!(attrs, &[][..]);
-            assert_sid(&sid, "abc");
             assert_eq!(rhs, None)
         }
         _ => panic!()
     }
 
-    match p_expression("val abc = def").unwrap() {
-        Expression::Val(attrs, sid, rhs, _) => {
+    match p_expression("val _ = def").unwrap() {
+        Expression::Val(attrs, Pattern::Blank(_), rhs, _) => {
             assert_eq!(attrs, &[][..]);
-            assert_sid(&sid, "abc");
             assert_sid_expression(rhs.unwrap().as_ref(), "def");
         }
         _ => panic!()
@@ -2454,6 +2453,410 @@ fn test_expression() {
     match p_expression("break abc").unwrap() {
         Expression::Break(_, val, _) => {
             assert_sid_expression(&val.unwrap(), "abc");
+        }
+        _ => panic!()
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum UsePrefix<'i> {
+    Mod(Pair<'i, Rule>),
+    Dep(Pair<'i, Rule>),
+    Magic(Pair<'i, Rule>),
+    None
+}
+
+fn pair_to_use_prefix<'i>(pair: Pair<'i, Rule>) -> UsePrefix<'i> {
+    debug_assert!(pair.as_rule() == Rule::use_prefix);
+    let p = pair.clone().into_inner().next();
+
+    match p {
+        None => UsePrefix::None,
+        Some(p) => match p.as_rule() {
+            Rule::_mod => UsePrefix::Mod(pair),
+            Rule::_dep => UsePrefix::Dep(pair),
+            Rule::_magic => UsePrefix::Magic(pair),
+            _ => unreachable!(),
+        }
+    }
+}
+
+pub fn p_use_prefix<'i>(input: &'i str) -> PestResult<UsePrefix<'i>> {
+    LookParser::parse(Rule::use_prefix, input).map(|mut pairs| pair_to_use_prefix(pairs.next().unwrap()))
+}
+
+#[test]
+fn test_use_prefix() {
+    match p_use_prefix("mod::").unwrap() {
+        UsePrefix::Mod(_) => {}
+        _ => panic!()
+    }
+
+    match p_use_prefix("dep::").unwrap() {
+        UsePrefix::Dep(_) => {}
+        _ => panic!()
+    }
+
+    match p_use_prefix("magic::").unwrap() {
+        UsePrefix::Magic(_) => {}
+        _ => panic!()
+    }
+
+    match p_use_prefix("").unwrap() {
+        UsePrefix::None => {}
+        _ => panic!()
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum UseTree<'i> {
+    IdLeaf(SimpleIdentifier<'i>, Pair<'i, Rule>),
+    SelfLeaf(Pair<'i, Rule>),
+    IdBranch(SimpleIdentifier<'i>, Vec<(Vec<Attribute<'i>>, UseTree<'i>)>, Pair<'i, Rule>),
+    SuperBranch(Vec<(Vec<Attribute<'i>>, UseTree<'i>)>, Pair<'i, Rule>),
+}
+
+fn pair_to_use_branch<'i>(p: Pair<'i, Rule>) -> Vec<(Vec<Attribute<'i>>, UseTree<'i>)> {
+    debug_assert!(p.as_rule() == Rule::use_branch);
+
+    let mut branches = vec![];
+
+    for pair in p.into_inner() {
+        match pair.as_rule() {
+            Rule::use_tree => {
+                branches.push((vec![], pair_to_use_tree(pair)));
+            }
+            Rule::attributed_use_tree => {
+                let mut attrs = vec![];
+                let mut tree = None;
+                for inner_pair in pair.into_inner() {
+                    match inner_pair.as_rule() {
+                        Rule::attribute => attrs.push(pair_to_attribute(inner_pair)),
+                        Rule::use_tree => tree = Some(pair_to_use_tree(inner_pair)),
+                        _ => unreachable!()
+                    }
+                }
+                branches.push((attrs, tree.unwrap()));
+            }
+            _ => unreachable!()
+        }
+    }
+
+    return branches;
+}
+
+fn pair_to_use_tree<'i>(p: Pair<'i, Rule>) -> UseTree<'i> {
+    debug_assert!(p.as_rule() == Rule::use_tree);
+    let mut pairs = p.clone().into_inner();
+
+    let pair = pairs.next().unwrap();
+    match pair.as_rule() {
+        Rule::_self => UseTree::SelfLeaf(p),
+        Rule::sid => {
+            let sid = pair_to_simple_identifier(pair);
+            match pairs.next() {
+                None => UseTree::IdLeaf(sid, p),
+                Some(scope_pair) => {
+                    debug_assert!(scope_pair.as_rule() == Rule::scope);
+                    UseTree::IdBranch(sid, pair_to_use_branch(pairs.next().unwrap()), p)
+                }
+            }
+        }
+        Rule::_super => {
+            debug_assert!(pairs.next().unwrap().as_rule() == Rule::scope);
+            UseTree::SuperBranch(pair_to_use_branch(pairs.next().unwrap()), p)
+        }
+        _ => unreachable!(),
+    }
+}
+
+pub fn p_use_tree<'i>(input: &'i str) -> PestResult<UseTree<'i>> {
+    LookParser::parse(Rule::use_tree, input).map(|mut pairs| pair_to_use_tree(pairs.next().unwrap()))
+}
+
+#[test]
+fn test_use_tree() {
+    match p_use_tree("abc").unwrap() {
+        UseTree::IdLeaf(sid, _) => assert_sid(&sid, "abc"),
+        _ => panic!()
+    }
+
+    match p_use_tree("super::{foo::bar, self}").unwrap() {
+        UseTree::SuperBranch(mut branches, _) => {
+            match branches.pop().unwrap() {
+                (attrs, UseTree::SelfLeaf(_)) => {
+                    assert_eq!(attrs.len(), 0);
+                }
+                _ => panic!()
+            }
+
+            match branches.pop().unwrap() {
+                (attrs, UseTree::IdBranch(sid, mut branches, _)) => {
+                    assert_eq!(attrs.len(), 0);
+                    assert_sid(&sid, "foo");
+                    match branches.pop().unwrap() {
+                        (attrs, UseTree::IdLeaf(sid, _)) => {
+                            assert_eq!(attrs.len(), 0);
+                            assert_sid(&sid, "bar");
+                        }
+                        _ => panic!()
+                    }
+                }
+                _ => panic!()
+            }
+        }
+        _ => panic!()
+    }
+
+    match p_use_tree("abc::{#[foo]#[bar]{def}}").unwrap() {
+        UseTree::IdBranch(sid, mut branches, _) => {
+            assert_sid(&sid, "abc");
+            match branches.pop().unwrap() {
+                (attrs, UseTree::IdLeaf(sid, _)) => {
+                    assert_sid(&sid, "def");
+                    assert_eq!(attrs.len(), 2)
+                }
+                _ => panic!(),
+            }
+        }
+        _ => panic!()
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum FfiLanguage {
+    C
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum FfiItem<'i> {
+    Fun(Vec<Attribute<'i>>, bool, SimpleIdentifier<'i>, Vec<(Vec<Attribute<'i>>, Pattern<'i>)>, Type<'i>, Pair<'i, Rule>),
+}
+
+fn pair_to_ffi_item<'i>(p: Pair<'i, Rule>) -> FfiItem<'i> {
+    debug_assert!(p.as_rule() == Rule::ffi_item);
+
+    let mut attrs = vec![];
+    for pair in p.clone().into_inner() {
+        match pair.as_rule() {
+            Rule::attribute => {
+                attrs.push(pair_to_attribute(pair));
+            }
+            Rule::actual_ffi_item => {
+                let mut pairs = pair.into_inner().next().unwrap().into_inner().peekable();
+                let public = pairs.peek().unwrap().as_rule() == Rule::_pub;
+
+                if public {
+                    pairs.next();
+                }
+
+                let sid = pair_to_simple_identifier(pairs.next().unwrap());
+                let args = pairs.next().unwrap().into_inner().map(pair_to_annotated_pattern).collect();
+                let return_type = pair_to_type(pairs.next().unwrap());
+
+                return FfiItem::Fun(attrs, public, sid, args, return_type, p);
+            }
+            _ => unreachable!()
+        }
+    }
+    unreachable!()
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Item<'i> {
+    Use(bool, UsePrefix<'i>, UseTree<'i>, Pair<'i, Rule>),
+    Type(bool, SimpleIdentifier<'i>, TypeDef<'i>, Pair<'i, Rule>),
+    Val(bool, Pattern<'i>, Expression<'i>, Pair<'i, Rule>),
+    Ffi(FfiLanguage, Vec<FfiItem<'i>>, Pair<'i, Rule>),
+}
+
+fn pair_to_use_item<'i>(p: Pair<'i, Rule>) -> Item<'i> {
+    debug_assert!(p.as_rule() == Rule::use_item);
+    let mut pairs = p.clone().into_inner().peekable();
+    let public = pairs.peek().unwrap().as_rule() == Rule::_pub;
+
+    if public {
+        pairs.next();
+    }
+
+    assert!(pairs.next().unwrap().as_rule() == Rule::_use);
+
+    let prefix = pair_to_use_prefix(pairs.next().unwrap());
+    let tree = pair_to_use_tree(pairs.next().unwrap());
+
+    Item::Use(public, prefix, tree, p)
+}
+
+fn pair_to_type_item<'i>(p: Pair<'i, Rule>) -> Item<'i> {
+    debug_assert!(p.as_rule() == Rule::type_item);
+    let mut pairs = p.clone().into_inner().peekable();
+    let public = pairs.peek().unwrap().as_rule() == Rule::_pub;
+
+    if public {
+        pairs.next();
+    }
+
+    assert!(pairs.next().unwrap().as_rule() == Rule::_type_kw);
+
+    let sid = pair_to_simple_identifier(pairs.next().unwrap());
+    let type_def = pair_to_type_def(pairs.next().unwrap());
+
+    Item::Type(public, sid, type_def, p)
+}
+
+fn pair_to_val_item<'i>(p: Pair<'i, Rule>) -> Item<'i> {
+    debug_assert!(p.as_rule() == Rule::val_item);
+    let mut pairs = p.clone().into_inner().peekable();
+    let public = pairs.peek().unwrap().as_rule() == Rule::_pub;
+
+    if public {
+        pairs.next();
+    }
+
+    assert!(pairs.next().unwrap().as_rule() == Rule::_val);
+
+    let pattern = pair_to_pattern(pairs.next().unwrap());
+    let val = pair_to_expression(pairs.next().unwrap());
+
+    Item::Val(public, pattern, val, p)
+}
+
+fn pair_to_ffi_block<'i>(p: Pair<'i, Rule>) -> Item<'i> {
+    debug_assert!(p.as_rule() == Rule::ffi_block);
+    let mut pairs = p.clone().into_inner();
+
+    assert!(pairs.next().unwrap().as_rule() == Rule::_ffi);
+    assert!(pairs.next().unwrap().as_rule() == Rule::ffi_language);
+
+    Item::Ffi(FfiLanguage::C, pairs.map(pair_to_ffi_item).collect(), p)
+}
+
+fn pair_to_item<'i>(p: Pair<'i, Rule>) -> Item<'i> {
+    debug_assert!(p.as_rule() == Rule::item);
+    let pair = p.into_inner().next().unwrap();
+
+    match pair.as_rule() {
+        Rule::use_item => pair_to_use_item(pair),
+        Rule::type_item => pair_to_type_item(pair),
+        Rule::val_item => pair_to_val_item(pair),
+        Rule::ffi_block => pair_to_ffi_block(pair),
+        _ => unreachable!()
+    }
+}
+
+pub fn p_item<'i>(input: &'i str) -> PestResult<Item<'i>> {
+    LookParser::parse(Rule::item, input).map(|mut pairs| pair_to_item(pairs.next().unwrap()))
+}
+
+#[test]
+fn test_item() {
+    match p_item("use foo").unwrap() {
+        Item::Use(false, UsePrefix::None, UseTree::IdLeaf(sid, _), _) => {
+            assert_sid(&sid, "foo");
+        }
+        _ => panic!()
+    }
+
+    match p_item("pub use self").unwrap() {
+        Item::Use(true, UsePrefix::None, UseTree::SelfLeaf(_), _) => {}
+        _ => panic!()
+    }
+
+    match p_item("type foo = bar").unwrap() {
+        Item::Type(false, sid, inner, _) => {
+            assert_sid(&sid, "foo");
+            assert_sid_type_def(&inner, "bar");
+        }
+        _ => panic!()
+    }
+
+    match p_item("pub type foo = bar").unwrap() {
+        Item::Type(true, sid, inner, _) => {
+            assert_sid(&sid, "foo");
+            assert_sid_type_def(&inner, "bar");
+        }
+        _ => panic!()
+    }
+
+    match p_item("val _ = bar").unwrap() {
+        Item::Val(false, Pattern::Blank(_), inner, _) => {
+            assert_sid_expression(&inner, "bar");
+        }
+        _ => panic!()
+    }
+
+    match p_item("pub val _ = bar").unwrap() {
+        Item::Val(true, Pattern::Blank(_), inner, _) => {
+            assert_sid_expression(&inner, "bar");
+        }
+        _ => panic!()
+    }
+
+    match p_item("ffi C {pub abc = () -> xyz}").unwrap() {
+        Item::Ffi(FfiLanguage::C, mut items, _) => {
+            match items.pop().unwrap() {
+                FfiItem::Fun(attrs, true, sid, args, return_type, _) => {
+                    assert_eq!(attrs.len(), 0);
+                    assert_sid(&sid, "abc");
+                    assert_eq!(args.len(), 0);
+                    assert_sid_type(&return_type, "xyz");
+                }
+                _ => panic!()
+            }
+        }
+        _ => panic!()
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct File<'i>(Vec<(Vec<Attribute<'i>>, Item<'i>)>);
+
+fn pair_to_file<'i>(p: Pair<'i, Rule>) -> File<'i> {
+    debug_assert!(p.as_rule() == Rule::file);
+
+    let mut items = vec![];
+
+    for pair in p.clone().into_inner() {
+        debug_assert!(pair.as_rule() == Rule::file_item);
+        let mut attrs = vec![];
+
+        for pair in pair.into_inner() {
+            match pair.as_rule() {
+                Rule::attribute => {
+                    attrs.push(pair_to_attribute(pair));
+                }
+                Rule::item => {
+                    items.push((attrs.clone(), pair_to_item(pair)));
+                }
+                _ => unreachable!()
+            }
+        }
+    }
+
+    File(items)
+}
+
+pub fn p_file<'i>(input: &'i str) -> PestResult<File<'i>> {
+    LookParser::parse(Rule::file, input).map(|mut pairs| pair_to_file(pairs.next().unwrap()))
+}
+
+#[test]
+fn test_file() {
+    let File(mut items) = p_file("val _ = foo #[foo] { type bar = baz }").unwrap();
+
+    match items.pop().unwrap() {
+        (attrs, Item::Type(false, sid, type_def, _)) => {
+            assert_eq!(attrs.len(), 1);
+            assert_sid(&sid, "bar");
+            assert_sid_type_def(&type_def, "baz");
+        }
+        _ => panic!()
+    }
+
+    match items.pop().unwrap() {
+        (attrs, Item::Val(false, Pattern::Blank(_), inner, _)) => {
+            assert_eq!(attrs.len(), 0);
+            assert_sid_expression(&inner, "foo");
         }
         _ => panic!()
     }

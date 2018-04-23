@@ -14,7 +14,7 @@ _use = { "use" }
 _mod = { "mod" }
 _self = { "self" }
 _super = { "super" }
-_deps = { "deps" }
+_dep = { "dep" }
 _magic = { "magic" }
 _goto = { "goto" }
 _label = { "label" }
@@ -30,7 +30,8 @@ _type_kw = { "type" }
 _macro = { "macro" }
 _mut = { "mut" }
 _pub = { "pub" }
-keyword = { _use | _mod | _self | _super | _deps | _magic | _goto | _label | _break | _return | _loop | _case | _if | _else | _val | _as | _type_kw | _macro | _mut | _pub }
+_ffi = { "ffi" }
+keyword = { _use | _mod | _self | _super | _dep | _magic | _goto | _label | _break | _return | _loop | _case | _if | _else | _val | _as | _type_kw | _macro | _mut | _pub | _ffi }
 
 // Punctuation
 scope = { "::" }
@@ -121,7 +122,7 @@ return_expression = { _return ~ expression? }
 loop_expression = { _loop ~ expression ~ "{" ~ (pattern ~ block)* ~ "}" }
 case_expression = { _case ~ expression ~ "{" ~ (pattern ~ block)* ~ "}" }
 // if_expression = { _if ~ expression ~ block ~ (_else ~ (if_expression | block))? }
-val_expression = { _val ~ sid ~ ("=" ~ expression)? }
+val_expression = { _val ~ pattern ~ ("=" ~ expression)? }
 generic_expression = { "<" ~ type_level_arg ~ ("," ~ type_level_arg)* ~ ">" ~ "=>" ~ expression }
 fun_literal = { product_anon_pattern ~ "->" ~ _type ~ block }
 actual_named_product_field_expression = { sid ~ "=" ~ expression }
@@ -134,3 +135,24 @@ ref_expression = { "@" ~ expression }
 ref_mut_expression = { "~" ~ expression }
 lexpression = { literal | type_application_named | type_application_anon | id | macro_invocation | ref_expression | ref_mut_expression | array_expression | product_repeated_expression | fun_literal | product_named_expression | product_anon_expression | generic_expression | val_expression | case_expression | loop_expression | return_expression | break_expression } // | if_expression
 expression = { (attribute+ ~ "{" ~ lexpression ~ expression_ ~ "}") | (lexpression ~ expression_) }
+
+// Uses
+use_prefix = { (_mod ~ scope) | (_dep ~ scope) | (_magic ~ scope) | "" }
+attributed_use_tree = { attribute+ ~ "{" ~ use_tree ~ "}" }
+use_branch = { use_tree | ("{" ~ (use_tree | attributed_use_tree) ~ ("," ~ (use_tree | attributed_use_tree))* ~ "}") }
+use_tree = {_self | (sid ~ scope ~ use_branch) | sid | (_super ~ scope ~ use_branch) }
+
+// Items
+ffi_fun = { _pub? ~ sid ~ "=" ~ product_anon_pattern ~ "->" ~ _type }
+actual_ffi_item = { ffi_fun }
+ffi_item = { actual_ffi_item | (attribute+ ~ "{" ~ actual_ffi_item ~ "}") }
+ffi_language = { "C" }
+ffi_block = { _ffi ~ ffi_language ~ "{" ~ ffi_item* ~ "}" }
+val_item = { _pub? ~ _val ~ pattern ~ "=" ~ expression }
+type_item = { _pub? ~ _type_kw ~ sid ~ "=" ~ type_def }
+use_item = { _pub? ~ _use ~ use_prefix ~ use_tree  }
+item = { use_item | type_item | val_item | ffi_block }
+
+// A file of look code
+file_item = { item | (attribute+ ~ "{" ~ item ~ "}") }
+file = { file_item* }
