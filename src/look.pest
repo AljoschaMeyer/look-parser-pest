@@ -140,14 +140,14 @@ expression = { (attribute+ ~ "{" ~ lexpression ~ expression_ ~ "}") | (lexpressi
 use_prefix = { (_mod ~ scope) | (_dep ~ scope) | (_magic ~ scope) | "" }
 attributed_use_tree = { attribute+ ~ "{" ~ use_tree ~ "}" }
 use_branch = { use_tree | ("{" ~ (use_tree | attributed_use_tree) ~ ("," ~ (use_tree | attributed_use_tree))* ~ "}") }
-use_tree = {_self | (sid ~ scope ~ use_branch) | sid | (_super ~ scope ~ use_branch) }
+use_tree = {(_self ~ (_as ~ sid)?) | (sid ~ scope ~ use_branch) | (sid ~ (_as ~ sid)?) | (_super ~ scope ~ use_branch) }
 
 // Items
-ffi_fun = { _pub? ~ sid ~ "=" ~ product_anon_pattern ~ "->" ~ _type }
-actual_ffi_item = { ffi_fun }
-ffi_item = { actual_ffi_item | (attribute+ ~ "{" ~ actual_ffi_item ~ "}") }
+ffi_type = { _pub? ~ _type_kw ~ sid }
+ffi_val = { _pub? ~ _val ~ sid ~ ":" ~ _type }
+ffi_item = { ffi_type | ffi_val }
 ffi_language = { "C" }
-ffi_block = { _ffi ~ ffi_language ~ "{" ~ ffi_item* ~ "}" }
+ffi_block = { _ffi ~ ffi_language ~ "{" ~ (ffi_item | (attribute+ ~ "{" ~ ffi_item ~ "}"))* ~ "}" }
 val_item = { _pub? ~ _val ~ pattern ~ "=" ~ expression }
 type_item = { _pub? ~ _type_kw ~ sid ~ "=" ~ type_def }
 use_item = { _pub? ~ _use ~ use_prefix ~ use_tree  }

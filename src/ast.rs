@@ -2512,6 +2512,8 @@ fn test_use_prefix() {
 pub enum UseTree<'i> {
     IdLeaf(SimpleIdentifier<'i>, Pair<'i, Rule>),
     SelfLeaf(Pair<'i, Rule>),
+    IdRenamedLeaf(SimpleIdentifier<'i>, SimpleIdentifier<'i>, Pair<'i, Rule>),
+    SelfRenamedLeaf(SimpleIdentifier<'i>, Pair<'i, Rule>),
     IdBranch(SimpleIdentifier<'i>, Vec<(Vec<Attribute<'i>>, UseTree<'i>)>, Pair<'i, Rule>),
     SuperBranch(Vec<(Vec<Attribute<'i>>, UseTree<'i>)>, Pair<'i, Rule>),
 }
@@ -2547,18 +2549,29 @@ fn pair_to_use_branch<'i>(p: Pair<'i, Rule>) -> Vec<(Vec<Attribute<'i>>, UseTree
 
 fn pair_to_use_tree<'i>(p: Pair<'i, Rule>) -> UseTree<'i> {
     debug_assert!(p.as_rule() == Rule::use_tree);
-    let mut pairs = p.clone().into_inner();
+    let mut pairs = p.clone().into_inner().peekable();
 
     let pair = pairs.next().unwrap();
     match pair.as_rule() {
-        Rule::_self => UseTree::SelfLeaf(p),
+        Rule::_self => {
+            let is_rename = pairs.peek().is_some();
+            if is_rename {
+                assert!(pairs.next().unwrap().as_rule() == Rule::_as);
+                UseTree::SelfRenamedLeaf(pair_to_simple_identifier(pairs.next().unwrap()), p)
+            } else {
+                UseTree::SelfLeaf(p)
+            }
+        },
         Rule::sid => {
             let sid = pair_to_simple_identifier(pair);
             match pairs.next() {
                 None => UseTree::IdLeaf(sid, p),
-                Some(scope_pair) => {
-                    debug_assert!(scope_pair.as_rule() == Rule::scope);
-                    UseTree::IdBranch(sid, pair_to_use_branch(pairs.next().unwrap()), p)
+                Some(pair) => {
+                    match pair.as_rule() {
+                        Rule::scope => UseTree::IdBranch(sid, pair_to_use_branch(pairs.next().unwrap()), p),
+                        Rule::_as => UseTree::IdRenamedLeaf(sid, pair_to_simple_identifier(pairs.next().unwrap()), p),
+                        _ => unreachable!()
+                    }
                 }
             }
         }
@@ -2621,6 +2634,28 @@ fn test_use_tree() {
         }
         _ => panic!()
     }
+
+    match p_use_tree("super::{foo as bar, self as baz}").unwrap() {
+        UseTree::SuperBranch(mut branches, _) => {
+            match branches.pop().unwrap() {
+                (attrs, UseTree::SelfRenamedLeaf(sid, _)) => {
+                    assert_eq!(attrs.len(), 0);
+                    assert_sid(&sid, "baz");
+                }
+                _ => panic!()
+            }
+
+            match branches.pop().unwrap() {
+                (attrs, UseTree::IdRenamedLeaf(sid, new_name, _)) => {
+                    assert_eq!(attrs.len(), 0);
+                    assert_sid(&sid, "foo");
+                    assert_sid(&new_name, "bar");
+                }
+                _ => panic!()
+            }
+        }
+        _ => panic!()
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -2630,36 +2665,40 @@ pub enum FfiLanguage {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum FfiItem<'i> {
-    Fun(Vec<Attribute<'i>>, bool, SimpleIdentifier<'i>, Vec<(Vec<Attribute<'i>>, Pattern<'i>)>, Type<'i>, Pair<'i, Rule>),
+    Type(bool, SimpleIdentifier<'i>, Pair<'i, Rule>),
+    Val(bool, SimpleIdentifier<'i>, Type<'i>, Pair<'i, Rule>),
 }
 
 fn pair_to_ffi_item<'i>(p: Pair<'i, Rule>) -> FfiItem<'i> {
     debug_assert!(p.as_rule() == Rule::ffi_item);
+    let pair = p.clone().into_inner().next().unwrap();
 
-    let mut attrs = vec![];
-    for pair in p.clone().into_inner() {
-        match pair.as_rule() {
-            Rule::attribute => {
-                attrs.push(pair_to_attribute(pair));
+    match pair.as_rule() {
+        Rule::ffi_type => {
+            let mut pairs = pair.into_inner().peekable();
+            let public = pairs.peek().unwrap().as_rule() == Rule::_pub;
+
+            if public {
+                pairs.next();
             }
-            Rule::actual_ffi_item => {
-                let mut pairs = pair.into_inner().next().unwrap().into_inner().peekable();
-                let public = pairs.peek().unwrap().as_rule() == Rule::_pub;
 
-                if public {
-                    pairs.next();
-                }
-
-                let sid = pair_to_simple_identifier(pairs.next().unwrap());
-                let args = pairs.next().unwrap().into_inner().map(pair_to_annotated_pattern).collect();
-                let return_type = pair_to_type(pairs.next().unwrap());
-
-                return FfiItem::Fun(attrs, public, sid, args, return_type, p);
-            }
-            _ => unreachable!()
+            assert!(pairs.next().unwrap().as_rule() == Rule::_type_kw);
+            return FfiItem::Type(public, pair_to_simple_identifier(pairs.next().unwrap()), p);
         }
+        Rule::ffi_val => {
+            let mut pairs = pair.into_inner().peekable();
+            let public = pairs.peek().unwrap().as_rule() == Rule::_pub;
+
+            if public {
+                pairs.next();
+            }
+
+            assert!(pairs.next().unwrap().as_rule() == Rule::_val);
+            let sid = pair_to_simple_identifier(pairs.next().unwrap());
+            return FfiItem::Val(public, sid, pair_to_type(pairs.next().unwrap()), p);
+        }
+        _ => unreachable!()
     }
-    unreachable!()
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -2667,7 +2706,7 @@ pub enum Item<'i> {
     Use(bool, UsePrefix<'i>, UseTree<'i>, Pair<'i, Rule>),
     Type(bool, SimpleIdentifier<'i>, TypeDef<'i>, Pair<'i, Rule>),
     Val(bool, Pattern<'i>, Expression<'i>, Pair<'i, Rule>),
-    Ffi(FfiLanguage, Vec<FfiItem<'i>>, Pair<'i, Rule>),
+    FfiBlock(FfiLanguage, Vec<(Vec<Attribute<'i>>, FfiItem<'i>)>, Pair<'i, Rule>),
 }
 
 fn pair_to_use_item<'i>(p: Pair<'i, Rule>) -> Item<'i> {
@@ -2728,7 +2767,23 @@ fn pair_to_ffi_block<'i>(p: Pair<'i, Rule>) -> Item<'i> {
     assert!(pairs.next().unwrap().as_rule() == Rule::_ffi);
     assert!(pairs.next().unwrap().as_rule() == Rule::ffi_language);
 
-    Item::Ffi(FfiLanguage::C, pairs.map(pair_to_ffi_item).collect(), p)
+    let mut block_items = vec![];
+    let mut attrs = vec![];
+
+    for pair in pairs {
+        match pair.as_rule() {
+            Rule::attribute => {
+                attrs.push(pair_to_attribute(pair));
+            }
+            Rule::ffi_item => {
+                block_items.push((attrs.clone(), pair_to_ffi_item(pair)));
+                attrs = vec![];
+            }
+            _ => unreachable!()
+        }
+    }
+
+    Item::FfiBlock(FfiLanguage::C, block_items, p)
 }
 
 fn pair_to_item<'i>(p: Pair<'i, Rule>) -> Item<'i> {
@@ -2792,14 +2847,21 @@ fn test_item() {
         _ => panic!()
     }
 
-    match p_item("ffi C {pub abc = () -> xyz}").unwrap() {
-        Item::Ffi(FfiLanguage::C, mut items, _) => {
+    match p_item("ffi C {pub type abc val def: ghi}").unwrap() {
+        Item::FfiBlock(FfiLanguage::C, mut items, _) => {
             match items.pop().unwrap() {
-                FfiItem::Fun(attrs, true, sid, args, return_type, _) => {
+                (attrs, FfiItem::Val(false, sid, the_type, _)) => {
+                    assert_eq!(attrs.len(), 0);
+                    assert_sid(&sid, "def");
+                    assert_sid_type(&the_type, "ghi");
+                }
+                _ => panic!()
+            }
+
+            match items.pop().unwrap() {
+                (attrs, FfiItem::Type(true, sid, _)) => {
                     assert_eq!(attrs.len(), 0);
                     assert_sid(&sid, "abc");
-                    assert_eq!(args.len(), 0);
-                    assert_sid_type(&return_type, "xyz");
                 }
                 _ => panic!()
             }
@@ -2861,3 +2923,5 @@ fn test_file() {
         _ => panic!()
     }
 }
+
+// TODO add short-circuiting land and lor operators?
