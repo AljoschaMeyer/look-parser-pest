@@ -226,6 +226,17 @@ pub enum MetaItem<'i> {
     Args(SimpleIdentifier<'i>, Vec<MetaItem<'i>>, Pair<'i, Rule>),
 }
 
+impl<'i> MetaItem<'i> {
+    pub fn sid(&self) -> &SimpleIdentifier<'i> {
+        match self {
+            &MetaItem::Nullary(ref sid, _) => sid,
+            &MetaItem::Pair(ref sid, _, _) => sid,
+            &MetaItem::LitArg(ref sid, _, _) => sid,
+            &MetaItem::Args(ref sid, _, _) => sid,
+        }
+    }
+}
+
 fn pair_to_meta_item<'i>(p: Pair<'i, Rule>) -> MetaItem<'i> {
     debug_assert!(p.as_rule() == Rule::meta_item);
     let pair = p.clone().into_inner().next().unwrap();
@@ -309,7 +320,7 @@ fn test_meta_item() {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Attribute<'i>(MetaItem<'i>, Pair<'i, Rule>);
+pub struct Attribute<'i>(pub MetaItem<'i>, pub Pair<'i, Rule>);
 
 fn pair_to_attribute<'i>(p: Pair<'i, Rule>) -> Attribute<'i> {
     debug_assert!(p.as_rule() == Rule::attribute);
@@ -329,8 +340,8 @@ fn test_attribute() {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct MacroInvocation<'i>(Identifier<'i>, &'i str, Pair<'i, Rule>);
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct MacroInvocation<'i>(pub Identifier<'i>, pub  &'i str, pub Pair<'i, Rule>);
 
 fn pair_to_macro_invocation<'i>(p: Pair<'i, Rule>) -> MacroInvocation<'i> {
     debug_assert!(p.as_rule() == Rule::macro_invocation);
@@ -359,7 +370,7 @@ fn test_macro_invocation() {
     assert!(p_macro_invocation("a(()").is_err());
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Repetition<'i> {
     Literal(u64, Pair<'i, Rule>),
     Macro(MacroInvocation<'i>),
@@ -440,7 +451,7 @@ fn test_repetition() {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Type<'i> {
     Id(Vec<Attribute<'i>>, Identifier<'i>, Pair<'i, Rule>),
     MacroInv(Vec<Attribute<'i>>, MacroInvocation<'i>, Pair<'i, Rule>),
@@ -945,14 +956,14 @@ fn test_type() {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Summand<'i> {
     Empty(SimpleIdentifier<'i>, Pair<'i, Rule>),
     Anon(SimpleIdentifier<'i>,  Vec<Type<'i>>, Pair<'i, Rule>),
     Named(SimpleIdentifier<'i>, Vec<(Vec<Attribute<'i>>, SimpleIdentifier<'i>, Type<'i>)>, Pair<'i, Rule>),
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TypeDef<'i> {
     Alias(Type<'i>),
     TypeLevelFun(Vec<Attribute<'i>>, Vec<(Vec<Attribute<'i>>, SimpleIdentifier<'i>)>, Box<TypeDef<'i>>, Pair<'i, Rule>),
@@ -1307,7 +1318,7 @@ fn test_type_def() {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Pattern<'i> {
     Blank(Pair<'i, Rule>),
     Id(bool, SimpleIdentifier<'i>, Option<Type<'i>>, Pair<'i, Rule>),
@@ -1594,7 +1605,7 @@ fn test_pattern() {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Expression<'i> {
     Id(Vec<Attribute<'i>>, Identifier<'i>, Pair<'i, Rule>),
     Literal(Vec<Attribute<'i>>, Literal<'i>, Pair<'i, Rule>),
@@ -1614,7 +1625,7 @@ pub enum Expression<'i> {
     FunApplicationAnon(Vec<Attribute<'i>>, Box<Expression<'i>>, Vec<Expression<'i>>, Pair<'i, Rule>),
     FunApplicationNamed(Vec<Attribute<'i>>, Box<Expression<'i>>, Vec<(Vec<Attribute<'i>>, SimpleIdentifier<'i>, Expression<'i>)>, Pair<'i, Rule>),
     Generic(Vec<Attribute<'i>>, Vec<(Vec<Attribute<'i>>, SimpleIdentifier<'i>)>, Box<Expression<'i>>, Pair<'i, Rule>),
-    TypeApplicationAnon(Vec<Attribute<'i>>, Identifier<'i>, Vec<Type<'i>>, Pair<'i, Rule>),
+    TypeApplicationAnon(Vec<Attribute<'i>>, Identifier<'i>, Vec<(Vec<Attribute<'i>>, Type<'i>)>, Pair<'i, Rule>),
     TypeApplicationNamed(Vec<Attribute<'i>>,
                          Identifier<'i>,
                          Vec<(Vec<Attribute<'i>>, SimpleIdentifier<'i>, Type<'i>)>,
@@ -2458,7 +2469,7 @@ fn test_expression() {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum UsePrefix<'i> {
     Mod(Pair<'i, Rule>),
     Dep(Pair<'i, Rule>),
@@ -2508,7 +2519,7 @@ fn test_use_prefix() {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum UseTree<'i> {
     IdLeaf(SimpleIdentifier<'i>, Pair<'i, Rule>),
     SelfLeaf(Pair<'i, Rule>),
@@ -2658,12 +2669,12 @@ fn test_use_tree() {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum FfiLanguage {
     C
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum FfiItem<'i> {
     Type(bool, SimpleIdentifier<'i>, Pair<'i, Rule>),
     Val(bool, SimpleIdentifier<'i>, Type<'i>, Pair<'i, Rule>),
@@ -2701,7 +2712,7 @@ fn pair_to_ffi_item<'i>(p: Pair<'i, Rule>) -> FfiItem<'i> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Item<'i> {
     Use(bool, UsePrefix<'i>, UseTree<'i>, Pair<'i, Rule>),
     Type(bool, SimpleIdentifier<'i>, TypeDef<'i>, Pair<'i, Rule>),
@@ -2870,8 +2881,8 @@ fn test_item() {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct File<'i>(Vec<(Vec<Attribute<'i>>, Item<'i>)>);
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct File<'i>(pub Vec<(Vec<Attribute<'i>>, Item<'i>)>);
 
 fn pair_to_file<'i>(p: Pair<'i, Rule>) -> File<'i> {
     debug_assert!(p.as_rule() == Rule::file);
@@ -2924,4 +2935,14 @@ fn test_file() {
     }
 }
 
-// TODO add short-circuiting land and lor operators?
+// List of magic:
+//
+// - Bool type (if we have magic Bool anyways, add land/lor operator and if-else and while?)
+// - short-circuiting `and` and `or` macros for the Bool type
+// - `sizeof` macro
+// - `alignof` macro (can be added later)
+//
+// List of attributes:
+//
+// - conditional compilation (`cond`)
+// - repr C

@@ -5,6 +5,8 @@ extern crate pest;
 extern crate pest_derive;
 
 pub mod ast;
+pub mod ast_walker;
+pub mod conditional_compilation;
 mod unescape;
 
 #[cfg(debug_assertions)]
