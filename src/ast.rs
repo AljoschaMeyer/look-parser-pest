@@ -110,6 +110,16 @@ pub enum Literal<'i> {
 }
 impl<'i> Eq for Literal<'i> {} // float literals are never NaN, Inf or -Inf
 
+impl<'i> Literal<'i> {
+    pub fn pair(&self) -> &Pair<'i, Rule> {
+        match self {
+            &Literal::Int(_, ref pair) => pair,
+            &Literal::Float(_, ref pair) => pair,
+            &Literal::String(_, ref pair) => pair,
+        }
+    }
+}
+
 fn pair_to_literal<'i>(p: Pair<'i, Rule>) -> Literal<'i> {
     debug_assert!(p.as_rule() == Rule::literal);
     let pair = p.into_inner().next().unwrap();
@@ -1331,6 +1341,37 @@ pub enum Pattern<'i> {
     SummandNamed(SimpleIdentifier<'i>, Vec<(Vec<Attribute<'i>>, SimpleIdentifier<'i>, Pattern<'i>)>, Pair<'i, Rule>)
 }
 
+impl<'i> Pattern<'i> {
+    pub fn pair(&self) -> &Pair<'i, Rule> {
+        match self {
+            &Pattern::Blank(ref pair) => pair,
+            &Pattern::Id(_, _, _, ref pair) => pair,
+            &Pattern::Literal(ref lit) => lit.pair(),
+            &Pattern::Ptr(_, ref pair) => pair,
+            &Pattern::ProductAnon(_, ref pair) => pair,
+            &Pattern::ProductNamed(_, ref pair) => pair,
+            &Pattern::SummandEmpty(_, ref pair) => pair,
+            &Pattern::SummandAnon(_, _, ref pair) => pair,
+            &Pattern::SummandNamed(_, _, ref pair) => pair,
+        }
+    }
+
+    pub fn is_refutable(&self) -> bool {
+        match self {
+            &Pattern::Blank(_) => false,
+            &Pattern::Id(_, _, _, _) => false,
+            &Pattern::Ptr(ref inner, _) => inner.as_ref().is_refutable(),
+            &Pattern::ProductAnon(ref inners, _) => {
+                inners.iter().all(|&(_, ref pattern)| pattern.is_refutable())
+            }
+            &Pattern::ProductNamed(ref inners, _) => {
+                inners.iter().all(|&(_, _, ref pattern)| pattern.is_refutable())
+            }
+            _ => true
+        }
+    }
+}
+
 fn pair_to_annotated_named_pattern<'i>(p: Pair<'i, Rule>) -> (Vec<Attribute<'i>>, SimpleIdentifier<'i>, Pattern<'i>) {
     debug_assert!(p.as_rule() == Rule::maybe_annotated_named_pattern);
 
@@ -1677,6 +1718,52 @@ impl<'i> Expression<'i> {
             &Expression::Loop(ref attrs, _, _, _) => attrs,
             &Expression::Return(ref attrs, _, _) => attrs,
             &Expression::Break(ref attrs, _, _) => attrs,
+        }
+    }
+
+    pub fn pair(&self) -> &Pair<'i, Rule> {
+        match self {
+            &Expression::Id(_, _, ref pair) => pair,
+            &Expression::Literal(_ , _, ref pair) => pair,
+            &Expression::MacroInv(_, _, ref pair) => pair,
+            &Expression::Ref(_, _, ref pair) => pair,
+            &Expression::RefMut(_, _, ref pair) => pair,
+            &Expression::Deref(_, _, ref pair) => pair,
+            &Expression::DerefMut(_, _, ref pair) => pair,
+            &Expression::Array(_, _, ref pair) => pair,
+            &Expression::ArrayIndex(_, _, _, ref pair) => pair,
+            &Expression::ProductRepeated(_, _, _, ref pair) => pair,
+            &Expression::ProductAnon(_, _,ref pair) => pair,
+            &Expression::ProductNamed(_, _, ref pair) => pair,
+            &Expression::ProductAccessAnon(_, _, _, ref pair) => pair,
+            &Expression::ProductAccessNamed(_, _, _, ref pair) => pair,
+            &Expression::FunLiteral(_, _, _, _, ref pair) => pair,
+            &Expression::FunApplicationAnon(_, _, _, ref pair) => pair,
+            &Expression::FunApplicationNamed(_, _, _, ref pair) => pair,
+            &Expression::Generic(_, _, _, ref pair) => pair,
+            &Expression::TypeApplicationAnon(_, _, _, ref pair) => pair,
+            &Expression::TypeApplicationNamed(_, _, _, ref pair) => pair,
+            &Expression::Cast(_, _, _, ref pair) => pair,
+            &Expression::LAnd(_, _, _, ref pair) => pair,
+            &Expression::LOr(_, _, _, ref pair) => pair,
+            &Expression::Assignment(_, _, _, ref pair) => pair,
+            &Expression::Val(_, _, _, ref pair) => pair,
+            &Expression::If(_, _, _, _, ref pair) => pair,
+            &Expression::Case(_, _, _, ref pair) => pair,
+            &Expression::While(_, _, _, ref pair) => pair,
+            &Expression::Loop(_, _, _, ref pair) => pair,
+            &Expression::Return(_, _, ref pair) => pair,
+            &Expression::Break(_, _, ref pair) => pair,
+        }
+    }
+
+    pub fn is_lvalue(&self) -> bool {
+        match self {
+            &Expression::Id(_, _, _) => true,
+            &Expression::DerefMut(_, ref inner, _) => inner.as_ref().is_lvalue(),
+            &Expression::ArrayIndex(_, ref inner, _, _) => inner.as_ref().is_lvalue(),
+            &Expression::ProductAccessAnon(_, ref inner, _, _) => inner.as_ref().is_lvalue(),
+            &Expression::ProductAccessNamed(_, ref inner, _, _) => inner.as_ref().is_lvalue(),
         }
     }
 }
