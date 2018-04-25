@@ -1625,16 +1625,19 @@ pub enum Expression<'i> {
     FunApplicationAnon(Vec<Attribute<'i>>, Box<Expression<'i>>, Vec<Expression<'i>>, Pair<'i, Rule>),
     FunApplicationNamed(Vec<Attribute<'i>>, Box<Expression<'i>>, Vec<(Vec<Attribute<'i>>, SimpleIdentifier<'i>, Expression<'i>)>, Pair<'i, Rule>),
     Generic(Vec<Attribute<'i>>, Vec<(Vec<Attribute<'i>>, SimpleIdentifier<'i>)>, Box<Expression<'i>>, Pair<'i, Rule>),
-    TypeApplicationAnon(Vec<Attribute<'i>>, Identifier<'i>, Vec<(Vec<Attribute<'i>>, Type<'i>)>, Pair<'i, Rule>),
+    TypeApplicationAnon(Vec<Attribute<'i>>, Identifier<'i>, Vec<Type<'i>>, Pair<'i, Rule>),
     TypeApplicationNamed(Vec<Attribute<'i>>,
                          Identifier<'i>,
                          Vec<(Vec<Attribute<'i>>, SimpleIdentifier<'i>, Type<'i>)>,
                          Pair<'i, Rule>),
     Cast(Vec<Attribute<'i>>, Box<Expression<'i>>, Type<'i>, Pair<'i, Rule>),
+    LAnd(Vec<Attribute<'i>>, Box<Expression<'i>>, Box<Expression<'i>>, Pair<'i, Rule>),
+    LOr(Vec<Attribute<'i>>, Box<Expression<'i>>, Box<Expression<'i>>, Pair<'i, Rule>),
     Assignment(Vec<Attribute<'i>>, Box<Expression<'i>>, Box<Expression<'i>>, Pair<'i, Rule>),
     Val(Vec<Attribute<'i>>, Pattern<'i>, Option<Box<Expression<'i>>>, Pair<'i, Rule>),
-    // If(Vec<Attribute<'i>>, Box<Expression<'i>>, Vec<Expression<'i>>, Option<Vec<Expression<'i>>>, Pair<'i, Rule>),
+    If(Vec<Attribute<'i>>, Box<Expression<'i>>, Vec<Expression<'i>>, Option<Vec<Expression<'i>>>, Pair<'i, Rule>),
     Case(Vec<Attribute<'i>>, Box<Expression<'i>>, Vec<(Pattern<'i>, Vec<Expression<'i>>)>, Pair<'i, Rule>),
+    While(Vec<Attribute<'i>>, Box<Expression<'i>>, Vec<Expression<'i>>, Pair<'i, Rule>),
     Loop(Vec<Attribute<'i>>, Box<Expression<'i>>, Vec<(Pattern<'i>, Vec<Expression<'i>>)>, Pair<'i, Rule>),
     Return(Vec<Attribute<'i>>, Option<Box<Expression<'i>>>, Pair<'i, Rule>),
     Break(Vec<Attribute<'i>>, Option<Box<Expression<'i>>>, Pair<'i, Rule>),
@@ -1664,10 +1667,13 @@ impl<'i> Expression<'i> {
             &Expression::TypeApplicationAnon(ref attrs, _, _, _) => attrs,
             &Expression::TypeApplicationNamed(ref attrs, _, _, _) => attrs,
             &Expression::Cast(ref attrs, _, _, _) => attrs,
+            &Expression::LAnd(ref attrs, _, _, _) => attrs,
+            &Expression::LOr(ref attrs, _, _, _) => attrs,
             &Expression::Assignment(ref attrs, _, _, _) => attrs,
             &Expression::Val(ref attrs, _, _, _) => attrs,
-            // &Expression::If(ref attrs, _, _, _, _) => attrs,
+            &Expression::If(ref attrs, _, _, _, _) => attrs,
             &Expression::Case(ref attrs, _, _, _) => attrs,
+            &Expression::While(ref attrs, _, _, _) => attrs,
             &Expression::Loop(ref attrs, _, _, _) => attrs,
             &Expression::Return(ref attrs, _, _) => attrs,
             &Expression::Break(ref attrs, _, _) => attrs,
@@ -1705,28 +1711,28 @@ fn pair_to_block<'i>(p: Pair<'i, Rule>) -> Vec<Expression<'i>> {
     p.into_inner().map(pair_to_expression).collect()
 }
 
-// fn pair_to_if_expression<'i>(p: Pair<'i, Rule>) -> Expression {
-//     debug_assert!(p.as_rule() == Rule::if_expression);
-//
-//     let mut pairs = p.clone().into_inner();
-//     assert_eq!(pairs.next().unwrap().as_rule(), Rule::_if);
-//     let cond = pair_to_expression(pairs.next().unwrap());
-//     let if_block = pair_to_block(pairs.next().unwrap());
-//
-//     match pairs.next() {
-//         Some(pair) => {
-//             assert_eq!(pair.as_rule(), Rule::_else);
-//
-//             let pair = pairs.next().unwrap();
-//             match pair.as_rule() {
-//                 Rule::if_expression => return Expression::If(vec![], Box::new(cond), if_block, Some(vec![pair_to_if_expression(pair)]), p),
-//                 Rule::block => return Expression::If(vec![], Box::new(cond), if_block, Some(pair_to_block(pair)), p),
-//                 _ => unreachable!()
-//             }
-//         }
-//         None => return Expression::If(vec![], Box::new(cond), if_block, None, p)
-//     }
-// }
+fn pair_to_if_expression<'i>(p: Pair<'i, Rule>) -> Expression {
+    debug_assert!(p.as_rule() == Rule::if_expression);
+
+    let mut pairs = p.clone().into_inner();
+    assert_eq!(pairs.next().unwrap().as_rule(), Rule::_if);
+    let cond = pair_to_expression(pairs.next().unwrap());
+    let if_block = pair_to_block(pairs.next().unwrap());
+
+    match pairs.next() {
+        Some(pair) => {
+            assert_eq!(pair.as_rule(), Rule::_else);
+
+            let pair = pairs.next().unwrap();
+            match pair.as_rule() {
+                Rule::if_expression => return Expression::If(vec![], Box::new(cond), if_block, Some(vec![pair_to_if_expression(pair)]), p),
+                Rule::block => return Expression::If(vec![], Box::new(cond), if_block, Some(pair_to_block(pair)), p),
+                _ => unreachable!()
+            }
+        }
+        None => return Expression::If(vec![], Box::new(cond), if_block, None, p)
+    }
+}
 
 fn pair_to_expression<'i>(p: Pair<'i, Rule>) -> Expression<'i> {
     debug_assert!(p.as_rule() == Rule::expression);
@@ -1852,10 +1858,10 @@ fn pair_to_expression<'i>(p: Pair<'i, Rule>) -> Expression<'i> {
                         }
                     }
 
-                    // Rule::if_expression => {
-                    //     exp = Some(pair_to_if_expression(pair));
-                    //     break;
-                    // }
+                    Rule::if_expression => {
+                        exp = Some(pair_to_if_expression(pair));
+                        break;
+                    }
 
                     Rule::case_expression => {
                         let mut pairs = pair.into_inner();
@@ -1868,6 +1874,16 @@ fn pair_to_expression<'i>(p: Pair<'i, Rule>) -> Expression<'i> {
                         }
 
                         exp = Some(Expression::Case(vec![], Box::new(matcher), branches, p.clone()));
+                        break;
+                    }
+
+                    Rule::while_expression => {
+                        let mut pairs = pair.into_inner();
+                        debug_assert!(pairs.next().unwrap().as_rule() == Rule::_while);
+                        let cond = pair_to_expression(pairs.next().unwrap());
+                        let block = pair_to_block(pairs.next().unwrap());
+
+                        exp = Some(Expression::While(vec![], Box::new(cond), block, p.clone()));
                         break;
                     }
 
@@ -1962,6 +1978,14 @@ fn pair_to_expression<'i>(p: Pair<'i, Rule>) -> Expression<'i> {
                     return Expression::Cast(attrs, Box::new(exp.unwrap()), pair_to_type(pair.into_inner().next().unwrap()), p);
                 }
 
+                Rule::land_ => {
+                    return Expression::LAnd(attrs, Box::new(exp.unwrap()), Box::new(pair_to_expression(pair.into_inner().next().unwrap())), p);
+                }
+
+                Rule::lor_ => {
+                    return Expression::LOr(attrs, Box::new(exp.unwrap()), Box::new(pair_to_expression(pair.into_inner().next().unwrap())), p);
+                }
+
                 Rule::assignment_ => {
                     return Expression::Assignment(attrs, Box::new(exp.unwrap()), Box::new(pair_to_expression(pair.into_inner().next().unwrap())), p);
                 }
@@ -1986,8 +2010,9 @@ fn pair_to_expression<'i>(p: Pair<'i, Rule>) -> Expression<'i> {
                 Expression::TypeApplicationAnon(_, id, args, pair) => Expression::TypeApplicationAnon(attrs, id, args, pair),
                 Expression::TypeApplicationNamed(_, id, args, pair) => Expression::TypeApplicationNamed(attrs, id, args, pair),
                 Expression::Val(_, sid, rhs, pair) => Expression::Val(attrs, sid, rhs, pair),
-                // Expression::If(_, cond, if_block, else_block, pair) => Expression::If(attrs, cond, if_block, else_block, pair),
+                Expression::If(_, cond, if_block, else_block, pair) => Expression::If(attrs, cond, if_block, else_block, pair),
                 Expression::Case(_, matcher, branches, pair) => Expression::Case(attrs, matcher, branches, pair),
+                Expression::While(_, cond, block, pair) => Expression::While(attrs, cond, block, pair),
                 Expression::Loop(_, matcher, branches, pair) => Expression::Loop(attrs, matcher, branches, pair),
                 Expression::Return(_, val, pair) => Expression::Return(attrs, val, pair),
                 Expression::Break(_, val, pair) => Expression::Break(attrs, val, pair),
@@ -2327,6 +2352,24 @@ fn test_expression() {
         _ => panic!()
     }
 
+    match p_expression("abc && def").unwrap() {
+        Expression::LAnd(attrs, lhs, rhs, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_expression(&lhs, "abc");
+            assert_sid_expression(&rhs, "def");
+        }
+        _ => panic!()
+    }
+
+    match p_expression("abc || def").unwrap() {
+        Expression::LOr(attrs, lhs, rhs, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_expression(&lhs, "abc");
+            assert_sid_expression(&rhs, "def");
+        }
+        _ => panic!()
+    }
+
     match p_expression("abc = def").unwrap() {
         Expression::Assignment(attrs, lhs, rhs, _) => {
             assert_eq!(attrs, &[][..]);
@@ -2352,61 +2395,61 @@ fn test_expression() {
         _ => panic!()
     }
 
-    // match p_expression("if a {}").unwrap() {
-    //     Expression::If(attrs, cond, if_block, else_block, _) => {
-    //         assert_eq!(attrs, &[][..]);
-    //         assert_sid_expression(&cond.as_ref(), "a");
-    //         assert_eq!(if_block, &[][..]);
-    //         assert_eq!(else_block, None);
-    //     }
-    //     _ => panic!()
-    // }
-    //
-    // match p_expression("if a {} else {}").unwrap() {
-    //     Expression::If(attrs, cond, if_block, else_block, _) => {
-    //         assert_eq!(attrs, &[][..]);
-    //         assert_sid_expression(&cond.as_ref(), "a");
-    //         assert_eq!(if_block, &[][..]);
-    //         assert_eq!(else_block.unwrap(), &[][..]);
-    //     }
-    //     _ => panic!()
-    // }
-    //
-    // match p_expression("if a {} else if b {}").unwrap() {
-    //     Expression::If(attrs, cond, if_block, else_block, _) => {
-    //         assert_eq!(attrs, &[][..]);
-    //         assert_sid_expression(&cond.as_ref(), "a");
-    //         assert_eq!(if_block, &[][..]);
-    //         match else_block.unwrap()[0] {
-    //             Expression::If(ref attrs, ref cond, ref if_block, ref else_block, _) => {
-    //                 assert_eq!(*attrs, &[][..]);
-    //                 assert_sid_expression(cond.as_ref(), "b");
-    //                 assert_eq!(*if_block, &[][..]);
-    //                 assert_eq!(*else_block, None);
-    //             }
-    //             _ => panic!()
-    //         }
-    //     }
-    //     _ => panic!()
-    // }
-    //
-    // match p_expression("if a {} else if b {} else {}").unwrap() {
-    //     Expression::If(attrs, cond, if_block, else_block, _) => {
-    //         assert_eq!(attrs, &[][..]);
-    //         assert_sid_expression(&cond.as_ref(), "a");
-    //         assert_eq!(if_block, &[][..]);
-    //         match else_block.unwrap()[0] {
-    //             Expression::If(ref attrs, ref cond, ref if_block, ref mut else_block, _) => {
-    //                 assert_eq!(*attrs, &[][..]);
-    //                 assert_sid_expression(cond.as_ref(), "b");
-    //                 assert_eq!(*if_block, &[][..]);
-    //                 assert_eq!(else_block.take().unwrap(), &[][..]);
-    //             }
-    //             _ => panic!()
-    //         }
-    //     }
-    //     _ => panic!()
-    // }
+    match p_expression("if a {}").unwrap() {
+        Expression::If(attrs, cond, if_block, else_block, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_expression(&cond.as_ref(), "a");
+            assert_eq!(if_block, &[][..]);
+            assert_eq!(else_block, None);
+        }
+        _ => panic!()
+    }
+
+    match p_expression("if a {} else {}").unwrap() {
+        Expression::If(attrs, cond, if_block, else_block, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_expression(&cond.as_ref(), "a");
+            assert_eq!(if_block, &[][..]);
+            assert_eq!(else_block.unwrap(), &[][..]);
+        }
+        _ => panic!()
+    }
+
+    match p_expression("if a {} else if b {}").unwrap() {
+        Expression::If(attrs, cond, if_block, else_block, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_expression(&cond.as_ref(), "a");
+            assert_eq!(if_block, &[][..]);
+            match else_block.unwrap()[0] {
+                Expression::If(ref attrs, ref cond, ref if_block, ref else_block, _) => {
+                    assert_eq!(*attrs, &[][..]);
+                    assert_sid_expression(cond.as_ref(), "b");
+                    assert_eq!(*if_block, &[][..]);
+                    assert_eq!(*else_block, None);
+                }
+                _ => panic!()
+            }
+        }
+        _ => panic!()
+    }
+
+    match p_expression("if a {} else if b {} else {}").unwrap() {
+        Expression::If(attrs, cond, if_block, else_block, _) => {
+            assert_eq!(attrs, &[][..]);
+            assert_sid_expression(&cond.as_ref(), "a");
+            assert_eq!(if_block, &[][..]);
+            match else_block.unwrap()[0] {
+                Expression::If(ref attrs, ref cond, ref if_block, ref mut else_block, _) => {
+                    assert_eq!(*attrs, &[][..]);
+                    assert_sid_expression(cond.as_ref(), "b");
+                    assert_eq!(*if_block, &[][..]);
+                    assert_eq!(else_block.take().unwrap(), &[][..]);
+                }
+                _ => panic!()
+            }
+        }
+        _ => panic!()
+    }
 
     match p_expression("case abc {}").unwrap() {
         Expression::Case(_, matcher, branches, _) => {
@@ -2420,6 +2463,14 @@ fn test_expression() {
         Expression::Case(_, matcher, branches, _) => {
             assert_sid_expression(&matcher, "abc");
             assert_eq!(branches.len(), 2);
+        }
+        _ => panic!()
+    }
+
+    match p_expression("while abc {}").unwrap() {
+        Expression::While(_, cond, block, _) => {
+            assert_sid_expression(&cond, "abc");
+            assert_eq!(block.len(), 0);
         }
         _ => panic!()
     }
@@ -2935,14 +2986,18 @@ fn test_file() {
     }
 }
 
+// Well-known types: Void, Bool, U8, I8, U16, I16, U32, I32, U64, I64, USize, ISize, F32, F64
+//
 // List of magic:
 //
-// - Bool type (if we have magic Bool anyways, add land/lor operator and if-else and while?)
-// - short-circuiting `and` and `or` macros for the Bool type
 // - `sizeof` macro
+// - modules for functions for the well-known types (e.g. magic::i32::add, magic::bool::not)
+// And some magic that can be added later as needed
 // - `alignof` macro (can be added later)
+// - stringify macro for features (also parse_intify, parse_floatify and a bool macro)
 //
 // List of attributes:
 //
 // - conditional compilation (`cond`)
-// - repr C
+// - repr (C)
+// - test

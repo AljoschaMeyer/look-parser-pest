@@ -24,6 +24,7 @@ _loop = { "loop" }
 _case = { "case" }
 _if = { "if" }
 _else = { "else" }
+_while = { "while" }
 _val = { "val" }
 _as = { "as" }
 _type_kw = { "type" }
@@ -31,7 +32,7 @@ _macro = { "macro" }
 _mut = { "mut" }
 _pub = { "pub" }
 _ffi = { "ffi" }
-keyword = { _use | _mod | _self | _super | _dep | _magic | _goto | _label | _break | _return | _loop | _case | _if | _else | _val | _as | _type_kw | _macro | _mut | _pub | _ffi }
+keyword = { _use | _mod | _self | _super | _dep | _magic | _goto | _label | _break | _return | _loop | _case | _if | _else | _while | _val | _as | _type_kw | _macro | _mut | _pub | _ffi }
 
 // Punctuation
 scope = { "::" }
@@ -108,20 +109,23 @@ block = { "{" ~ ((expression ~ (";" ~ expression)*) | "") ~ "}" }
 
 // Left recursive expressions
 assignment_ = { "=" ~ expression }
+lor_ = { "||" ~ expression }
+land_ = { "&&" ~ expression }
 cast_ = { "as" ~ _type }
 product_access_anon_ = { "." ~ literal }
 product_access_named_ = { "." ~ sid }
 array_index_ = { "[" ~ expression ~ "]" }
 deref_mut_ = { "~" }
 deref_ = { "@" }
-expression_ = { deref_ | deref_mut_ | array_index_ | product_access_named_ | product_access_anon_ | cast_ | product_named_expression | product_anon_expression | assignment_ | "" }
+expression_ = { deref_ | deref_mut_ | array_index_ | product_access_named_ | product_access_anon_ | cast_ | product_named_expression | product_anon_expression | assignment_ | land_ | lor_ | "" }
 
 // Expressions
 break_expression = { _break ~ expression? }
 return_expression = { _return ~ expression? }
+while_expression = { _while ~ expression ~ block }
 loop_expression = { _loop ~ expression ~ "{" ~ (pattern ~ block)* ~ "}" }
 case_expression = { _case ~ expression ~ "{" ~ (pattern ~ block)* ~ "}" }
-// if_expression = { _if ~ expression ~ block ~ (_else ~ (if_expression | block))? }
+if_expression = { _if ~ expression ~ block ~ (_else ~ (if_expression | block))? }
 val_expression = { _val ~ pattern ~ ("=" ~ expression)? }
 generic_expression = { "<" ~ type_level_arg ~ ("," ~ type_level_arg)* ~ ">" ~ "=>" ~ expression }
 fun_literal = { product_anon_pattern ~ "->" ~ _type ~ block }
@@ -133,7 +137,7 @@ product_repeated_expression = { "(" ~ expression ~ ";" ~ repetition ~ ")" }
 array_expression = { "[" ~ expression ~ "]" }
 ref_expression = { "@" ~ expression }
 ref_mut_expression = { "~" ~ expression }
-lexpression = { literal | type_application_named | type_application_anon | id | macro_invocation | ref_expression | ref_mut_expression | array_expression | product_repeated_expression | fun_literal | product_named_expression | product_anon_expression | generic_expression | val_expression | case_expression | loop_expression | return_expression | break_expression } // | if_expression
+lexpression = { literal | type_application_named | type_application_anon | id | macro_invocation | ref_expression | ref_mut_expression | array_expression | product_repeated_expression | fun_literal | product_named_expression | product_anon_expression | generic_expression | val_expression | case_expression | loop_expression | while_expression | return_expression | break_expression | if_expression }
 expression = { (attribute+ ~ "{" ~ lexpression ~ expression_ ~ "}") | (lexpression ~ expression_) }
 
 // Uses

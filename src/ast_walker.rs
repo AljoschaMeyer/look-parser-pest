@@ -664,6 +664,14 @@ impl AstWalkerMut {
                     self.walk_expression(inner.as_mut());
                     self.walk_type(_type);
                 }
+                &mut Expression::LAnd(ref mut attrs, ref mut lhs, ref mut rhs, _) |
+                &mut Expression::LOr(ref mut attrs, ref mut lhs, ref mut rhs, _) => {
+                    for attr in attrs {
+                        self.walk_attribute(attr);
+                    }
+                    self.walk_expression(lhs.as_mut());
+                    self.walk_expression(rhs.as_mut());
+                }
                 &mut Expression::Assignment(ref mut attrs, ref mut assignee, ref mut val, _) => {
                     for attr in attrs {
                         self.walk_attribute(attr);
@@ -677,6 +685,36 @@ impl AstWalkerMut {
                     }
                     self.walk_pattern(pattern);
                     rhs.as_mut().map_or((), |val| self.walk_expression(val));
+                }
+                &mut Expression::If(ref mut attrs,
+                                    ref mut cond,
+                                    ref mut if_exprs,
+                                    ref mut else_exprs,
+                                    _) => {
+                    for attr in attrs {
+                        self.walk_attribute(attr);
+                    }
+                    self.walk_expression(cond.as_mut());
+                    for exp in if_exprs {
+                        self.walk_expression(exp);
+                    }
+                    match else_exprs {
+                        &mut Some(ref mut exprs) => {
+                            for exp in exprs {
+                                self.walk_expression(exp);
+                            }
+                        }
+                        &mut None => {}
+                    }
+                }
+                &mut Expression::While(ref mut attrs, ref mut cond, ref mut block, _) => {
+                    for attr in attrs {
+                        self.walk_attribute(attr);
+                    }
+                    self.walk_expression(cond.as_mut());
+                    for exp in block {
+                        self.walk_expression(exp);
+                    }
                 }
                 &mut Expression::Case(ref mut attrs, ref mut exp, ref mut branches, _) |
                 &mut Expression::Loop(ref mut attrs, ref mut exp, ref mut branches, _) => {
