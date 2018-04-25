@@ -1764,6 +1764,7 @@ impl<'i> Expression<'i> {
             &Expression::ArrayIndex(_, ref inner, _, _) => inner.as_ref().is_lvalue(),
             &Expression::ProductAccessAnon(_, ref inner, _, _) => inner.as_ref().is_lvalue(),
             &Expression::ProductAccessNamed(_, ref inner, _, _) => inner.as_ref().is_lvalue(),
+            _ => false,
         }
     }
 }

@@ -1,5 +1,66 @@
 use ast::*;
 
+pub fn file_true(_: &mut File) -> bool {
+    true
+}
+pub fn file_unit(_: &mut File) {}
+pub fn attribute_true(_: &mut Attribute) -> bool {
+    true
+}
+pub fn attribute_unit(_: &mut Attribute) {}
+pub fn item_true(_: &mut Item) -> bool {
+    true
+}
+pub fn item_unit(_: &mut Item) {}
+pub fn use_prefix_unit(_: &mut UsePrefix) {}
+pub fn use_tree_true(_: &mut UseTree) -> bool {
+    true
+}
+pub fn use_tree_unit(_: &mut UseTree) {}
+pub fn simple_identifier_unit(_: &mut SimpleIdentifier) {}
+pub fn type_def_true(_: &mut TypeDef) -> bool {
+    true
+}
+pub fn type_def_unit(_: &mut TypeDef) {}
+pub fn pattern_true(_: &mut Pattern) -> bool {
+    true
+}
+pub fn pattern_unit(_: &mut Pattern) {}
+pub fn expression_true(_: &mut Expression) -> bool {
+    true
+}
+pub fn expression_unit(_: &mut Expression) {}
+pub fn ffi_language_unit(_: &mut FfiLanguage) {}
+pub fn ffi_item_true(_: &mut FfiItem) -> bool {
+    true
+}
+pub fn ffi_item_unit(_: &mut FfiItem) {}
+pub fn type_true(_: &mut Type) -> bool {
+    true
+}
+pub fn type_unit(_: &mut Type) {}
+pub fn summand_true(_: &mut Summand) -> bool {
+    true
+}
+pub fn summand_unit(_: &mut Summand) {}
+pub fn identifier_true(_: &mut Identifier) -> bool {
+    true
+}
+pub fn identifier_unit(_: &mut Identifier) {}
+pub fn literal_unit(_: &mut Literal) {}
+pub fn macro_invocation_true(_: &mut MacroInvocation) -> bool {
+    true
+}
+pub fn macro_invocation_unit(_: &mut MacroInvocation) {}
+pub fn repetition_true(_: &mut Repetition) -> bool {
+    true
+}
+pub fn repetition_unit(_: &mut Repetition) {}
+pub fn meta_item_true(_: &mut MetaItem) -> bool {
+    true
+}
+pub fn meta_item_unit(_: &mut MetaItem) {}
+
 // An AST walker, similiar to https://help.eclipse.org/mars/index.jsp?topic=%2Forg.eclipse.jdt.doc.isv%2Freference%2Fapi%2Forg%2Feclipse%2Fjdt%2Fcore%2Fdom%2FJavadoc.html
 //
 // When reaching a node, it calls first calls the nodetype_pre_fn function. If it returns true, it
@@ -10,98 +71,93 @@ use ast::*;
 //
 // Unset functions behave as if they returned true (so a walker without any set functions traverses
 // the whole ast, but does nothing).
-pub struct AstWalkerMut {
-    pub file_pre_fn: Option<Box<FnMut(&mut File) -> bool>>,
-    pub file_post_fn: Option<Box<FnMut(&mut File)>>,
+pub struct AstWalkerMut<F01,
+                        F02,
+                        F03,
+                        F04,
+                        F05,
+                        F06,
+                        F07,
+                        F08,
+                        F09,
+                        F10,
+                        F11,
+                        F12,
+                        F13,
+                        F14,
+                        F15,
+                        F16,
+                        F17,
+                        F18,
+                        F19,
+                        F20,
+                        F21,
+                        F22,
+                        F23,
+                        F24,
+                        F25,
+                        F26,
+                        F27,
+                        F28,
+                        F29,
+                        F30,
+                        F31,
+                        F32>
+{
+    pub file_pre_fn: F01,
+    pub file_post_fn: F02,
 
-    pub attribute_pre_fn: Option<Box<FnMut(&mut Attribute) -> bool>>,
-    pub attribute_post_fn: Option<Box<FnMut(&mut Attribute)>>,
+    pub attribute_pre_fn: F03,
+    pub attribute_post_fn: F04,
 
-    pub item_pre_fn: Option<Box<FnMut(&mut Item) -> bool>>,
-    pub item_post_fn: Option<Box<FnMut(&mut Item)>>,
+    pub item_pre_fn: F05,
+    pub item_post_fn: F06,
 
-    pub use_prefix_fn: Option<Box<FnMut(&mut UsePrefix)>>,
+    pub use_prefix_fn: F07,
 
-    pub use_tree_pre_fn: Option<Box<FnMut(&mut UseTree) -> bool>>,
-    pub use_tree_post_fn: Option<Box<FnMut(&mut UseTree)>>,
+    pub use_tree_pre_fn: F08,
+    pub use_tree_post_fn: F09,
 
-    pub simple_identifier_fn: Option<Box<FnMut(&mut SimpleIdentifier)>>,
+    pub simple_identifier_fn: F10,
 
-    pub type_def_pre_fn: Option<Box<FnMut(&mut TypeDef) -> bool>>,
-    pub type_def_post_fn: Option<Box<FnMut(&mut TypeDef)>>,
+    pub type_def_pre_fn: F11,
+    pub type_def_post_fn: F12,
 
-    pub pattern_pre_fn: Option<Box<FnMut(&mut Pattern) -> bool>>,
-    pub pattern_post_fn: Option<Box<FnMut(&mut Pattern)>>,
+    pub pattern_pre_fn: F13,
+    pub pattern_post_fn: F14,
 
-    pub expression_pre_fn: Option<Box<FnMut(&mut Expression) -> bool>>,
-    pub expression_post_fn: Option<Box<FnMut(&mut Expression)>>,
+    pub expression_pre_fn: F15,
+    pub expression_post_fn: F16,
 
-    pub ffi_language_fn: Option<Box<FnMut(&mut FfiLanguage)>>,
+    pub ffi_language_fn: F17,
 
-    pub ffi_item_pre_fn: Option<Box<FnMut(&mut FfiItem) -> bool>>,
-    pub ffi_item_post_fn: Option<Box<FnMut(&mut FfiItem)>>,
+    pub ffi_item_pre_fn: F18,
+    pub ffi_item_post_fn: F19,
 
-    pub type_pre_fn: Option<Box<FnMut(&mut Type) -> bool>>,
-    pub type_post_fn: Option<Box<FnMut(&mut Type)>>,
+    pub type_pre_fn: F20,
+    pub type_post_fn: F21,
 
-    pub summand_pre_fn: Option<Box<FnMut(&mut Summand) -> bool>>,
-    pub summand_post_fn: Option<Box<FnMut(&mut Summand)>>,
+    pub summand_pre_fn: F22,
+    pub summand_post_fn: F23,
 
-    pub identifier_pre_fn: Option<Box<FnMut(&mut Identifier) -> bool>>,
-    pub identifier_post_fn: Option<Box<FnMut(&mut Identifier)>>,
+    pub identifier_pre_fn: F24,
+    pub identifier_post_fn: F25,
 
-    pub literal_fn: Option<Box<FnMut(&mut Literal)>>,
+    pub literal_fn: F26,
 
-    pub macro_invocation_pre_fn: Option<Box<FnMut(&mut MacroInvocation) -> bool>>,
-    pub macro_invocation_post_fn: Option<Box<FnMut(&mut MacroInvocation)>>,
+    pub macro_invocation_pre_fn: F27,
+    pub macro_invocation_post_fn: F28,
 
-    pub repetition_pre_fn: Option<Box<FnMut(&mut Repetition) -> bool>>,
-    pub repetition_post_fn: Option<Box<FnMut(&mut Repetition)>>,
+    pub repetition_pre_fn: F29,
+    pub repetition_post_fn: F30,
 
-    pub meta_item_pre_fn: Option<Box<FnMut(&mut MetaItem) -> bool>>,
-    pub meta_item_post_fn: Option<Box<FnMut(&mut MetaItem)>>,
+    pub meta_item_pre_fn: F31,
+    pub meta_item_post_fn: F32,
 }
 
-impl AstWalkerMut {
-    pub fn new() -> AstWalkerMut {
-        AstWalkerMut {
-            file_pre_fn: None,
-            file_post_fn: None,
-            attribute_pre_fn: None,
-            attribute_post_fn: None,
-            item_pre_fn: None,
-            item_post_fn: None,
-            use_prefix_fn: None,
-            use_tree_pre_fn: None,
-            use_tree_post_fn: None,
-            simple_identifier_fn: None,
-            type_def_pre_fn: None,
-            type_def_post_fn: None,
-            pattern_pre_fn: None,
-            pattern_post_fn: None,
-            expression_pre_fn: None,
-            expression_post_fn: None,
-            ffi_language_fn: None,
-            ffi_item_pre_fn: None,
-            ffi_item_post_fn: None,
-            type_pre_fn: None,
-            type_post_fn: None,
-            summand_pre_fn: None,
-            summand_post_fn: None,
-            identifier_pre_fn: None,
-            identifier_post_fn: None,
-            literal_fn: None,
-            macro_invocation_pre_fn: None,
-            macro_invocation_post_fn: None,
-            repetition_pre_fn: None,
-            repetition_post_fn: None,
-            meta_item_pre_fn: None,
-            meta_item_post_fn: None,
-        }
-    }
-
+impl<F01: FnMut(&mut File) -> bool, F02: FnMut(&mut File), F03: FnMut(&mut Attribute) -> bool, F04: FnMut(&mut Attribute), F05: FnMut(&mut Item) -> bool, F06: FnMut(&mut Item), F07: FnMut(&mut UsePrefix), F08: FnMut(&mut UseTree) -> bool, F09: FnMut(&mut UseTree), F10: FnMut(&mut SimpleIdentifier), F11: FnMut(&mut TypeDef) -> bool, F12: FnMut(&mut TypeDef), F13: FnMut(&mut Pattern) -> bool, F14: FnMut(&mut Pattern), F15: FnMut(&mut Expression) -> bool, F16: FnMut(&mut Expression), F17: FnMut(&mut FfiLanguage), F18: FnMut(&mut FfiItem) -> bool, F19: FnMut(&mut FfiItem), F20: FnMut(&mut Type) -> bool, F21: FnMut(&mut Type), F22: FnMut(&mut Summand) -> bool, F23: FnMut(&mut Summand), F24: FnMut(&mut Identifier) -> bool, F25: FnMut(&mut Identifier), F26: FnMut(&mut Literal), F27: FnMut(&mut MacroInvocation) -> bool, F28: FnMut(&mut MacroInvocation), F29: FnMut(&mut Repetition) -> bool, F30: FnMut(&mut Repetition), F31: FnMut(&mut MetaItem) -> bool, F32: FnMut(&mut MetaItem)> AstWalkerMut<F01, F02, F03, F04, F05, F06, F07, F08, F09, F10, F11, F12, F13, F14, F15, F16, F17, F18, F19, F20, F21, F22, F23, F24, F25, F26, F27, F28, F29, F30, F31, F32> {
     pub fn walk_file(&mut self, file: &mut File) {
-        if self.file_pre_fn.as_mut().map_or(true, |fun| fun(file)) {
+        if (self.file_pre_fn)(file) {
             for &mut (ref mut attrs, ref mut item) in file.0.iter_mut() {
                 for attr in attrs {
                     self.walk_attribute(attr);
@@ -110,23 +166,19 @@ impl AstWalkerMut {
             }
         }
 
-        self.file_post_fn.as_mut().map(|fun| fun(file));
+        (self.file_post_fn)(file);
     }
 
     pub fn walk_attribute(&mut self, attr: &mut Attribute) {
-        if self.attribute_pre_fn
-               .as_mut()
-               .map_or(true, |fun| fun(attr)) {
+        if (self.attribute_pre_fn)(attr) {
             self.walk_meta_item(&mut attr.0);
         }
 
-        self.attribute_post_fn.as_mut().map(|fun| fun(attr));
+        (self.attribute_post_fn)(attr);
     }
 
     pub fn walk_meta_item(&mut self, meta: &mut MetaItem) {
-        if self.meta_item_pre_fn
-               .as_mut()
-               .map_or(true, |fun| fun(meta)) {
+        if (self.meta_item_pre_fn)(meta) {
             match meta {
                 &mut MetaItem::Nullary(ref mut sid, _) => self.walk_simple_identifier(sid),
                 &mut MetaItem::Pair(ref mut sid, ref mut lit, _) => {
@@ -146,55 +198,53 @@ impl AstWalkerMut {
             }
         }
 
-        self.meta_item_post_fn.as_mut().map(|fun| fun(meta));
+        (self.meta_item_post_fn)(meta);
     }
 
     pub fn walk_simple_identifier(&mut self, sid: &mut SimpleIdentifier) {
-        self.simple_identifier_fn.as_mut().map(|fun| fun(sid));
+        (self.simple_identifier_fn)(sid);
     }
 
     pub fn walk_literal(&mut self, lit: &mut Literal) {
-        self.literal_fn.as_mut().map(|fun| fun(lit));
+        (self.literal_fn)(lit);
     }
 
-    pub fn walk_item(&mut self, item: &mut Item) {
-        if self.item_pre_fn.as_mut().map_or(true, |fun| fun(item)) {
-            match item {
-                &mut Item::Use(_, ref mut prefix, ref mut tree, _) => {
-                    self.walk_use_prefix(prefix);
-                    self.walk_use_tree(tree);
-                }
-                &mut Item::Type(_, ref mut sid, ref mut type_def, _) => {
-                    self.walk_simple_identifier(sid);
-                    self.walk_type_def(type_def);
-                }
-                &mut Item::Val(_, ref mut pattern, ref mut expression, _) => {
-                    self.walk_pattern(pattern);
-                    self.walk_expression(expression);
-                }
-                &mut Item::FfiBlock(ref mut ffi_language, ref mut ffi_items, _) => {
-                    self.walk_ffi_language(ffi_language);
-                    for &mut (ref mut attrs, ref mut ffi_item) in ffi_items {
-                        for attr in attrs {
-                            self.walk_attribute(attr);
+        pub fn walk_item(&mut self, item: &mut Item) {
+            if (self.item_pre_fn)(item) {
+                match item {
+                    &mut Item::Use(_, ref mut prefix, ref mut tree, _) => {
+                        self.walk_use_prefix(prefix);
+                        self.walk_use_tree(tree);
+                    }
+                    &mut Item::Type(_, ref mut sid, ref mut type_def, _) => {
+                        self.walk_simple_identifier(sid);
+                        self.walk_type_def(type_def);
+                    }
+                    &mut Item::Val(_, ref mut pattern, ref mut expression, _) => {
+                        self.walk_pattern(pattern);
+                        self.walk_expression(expression);
+                    }
+                    &mut Item::FfiBlock(ref mut ffi_language, ref mut ffi_items, _) => {
+                        self.walk_ffi_language(ffi_language);
+                        for &mut (ref mut attrs, ref mut ffi_item) in ffi_items {
+                            for attr in attrs {
+                                self.walk_attribute(attr);
+                            }
+                            self.walk_ffi_item(ffi_item);
                         }
-                        self.walk_ffi_item(ffi_item);
                     }
                 }
             }
+
+            (self.item_post_fn)(item);
         }
 
-        self.item_post_fn.as_mut().map(|fun| fun(item));
-    }
-
     pub fn walk_use_prefix(&mut self, prefix: &mut UsePrefix) {
-        self.use_prefix_fn.as_mut().map(|fun| fun(prefix));
+        (self.use_prefix_fn)(prefix);
     }
 
     pub fn walk_use_tree(&mut self, tree: &mut UseTree) {
-        if self.use_tree_pre_fn
-               .as_mut()
-               .map_or(true, |fun| fun(tree)) {
+        if (self.use_tree_pre_fn)(tree){
             match tree {
                 &mut UseTree::IdLeaf(ref mut sid, _) => self.walk_simple_identifier(sid),
                 &mut UseTree::SelfLeaf(_) => {}
@@ -223,13 +273,11 @@ impl AstWalkerMut {
             }
         }
 
-        self.use_tree_post_fn.as_mut().map(|fun| fun(tree));
+        (self.use_tree_post_fn)(tree);
     }
 
     pub fn walk_type_def(&mut self, type_def: &mut TypeDef) {
-        if self.type_def_pre_fn
-               .as_mut()
-               .map_or(true, |fun| fun(type_def)) {
+        if (self.type_def_pre_fn)(type_def) {
             match type_def {
                 &mut TypeDef::Alias(ref mut inner_type) => self.walk_type(inner_type),
                 &mut TypeDef::TypeLevelFun(ref mut attrs, ref mut args, ref mut inner, _) => {
@@ -258,13 +306,11 @@ impl AstWalkerMut {
             }
         }
 
-        self.type_def_post_fn.as_mut().map(|fun| fun(type_def));
+        (self.type_def_post_fn)(type_def);
     }
 
     pub fn walk_summand(&mut self, summand: &mut Summand) {
-        if self.summand_pre_fn
-               .as_mut()
-               .map_or(true, |fun| fun(summand)) {
+        if (self.summand_pre_fn)(summand) {
             match summand {
                 &mut Summand::Empty(ref mut sid, _) => self.walk_simple_identifier(sid),
                 &mut Summand::Anon(ref mut sid, ref mut types, _) => {
@@ -286,11 +332,11 @@ impl AstWalkerMut {
             }
         }
 
-        self.summand_post_fn.as_mut().map(|fun| fun(summand));
+        (self.summand_post_fn)(summand);
     }
 
     pub fn walk_type(&mut self, _type: &mut Type) {
-        if self.type_pre_fn.as_mut().map_or(true, |fun| fun(_type)) {
+        if (self.type_pre_fn)(_type) {
             match _type {
                 &mut Type::Id(ref mut attrs, ref mut id, _) => {
                     for attr in attrs {
@@ -386,50 +432,40 @@ impl AstWalkerMut {
             }
         }
 
-        self.type_post_fn.as_mut().map(|fun| fun(_type));
+        (self.type_post_fn)(_type);
     }
 
     pub fn walk_repetition(&mut self, rep: &mut Repetition) {
-        if self.repetition_pre_fn
-               .as_mut()
-               .map_or(true, |fun| fun(rep)) {
+        if (self.repetition_pre_fn)(rep) {
             match rep {
                 &mut Repetition::Literal(_, _) => {}
                 &mut Repetition::Macro(ref mut inv) => self.walk_macro_invocation(inv),
             }
         }
 
-        self.repetition_post_fn.as_mut().map(|fun| fun(rep));
+        (self.repetition_post_fn)(rep);
     }
 
     pub fn walk_macro_invocation(&mut self, inv: &mut MacroInvocation) {
-        if self.macro_invocation_pre_fn
-               .as_mut()
-               .map_or(true, |fun| fun(inv)) {
+        if (self.macro_invocation_pre_fn)(inv) {
             self.walk_identifier(&mut inv.0);
         }
 
-        self.macro_invocation_post_fn
-            .as_mut()
-            .map(|fun| fun(inv));
+        (self.macro_invocation_post_fn)(inv);
     }
 
     pub fn walk_identifier(&mut self, id: &mut Identifier) {
-        if self.identifier_pre_fn
-               .as_mut()
-               .map_or(true, |fun| fun(id)) {
+        if (self.identifier_pre_fn)(id) {
             for sid in id.0.iter_mut() {
                 self.walk_simple_identifier(sid);
             }
         }
 
-        self.identifier_post_fn.as_mut().map(|fun| fun(id));
+        (self.identifier_post_fn)(id);
     }
 
     pub fn walk_pattern(&mut self, pattern: &mut Pattern) {
-        if self.pattern_pre_fn
-               .as_mut()
-               .map_or(true, |fun| fun(pattern)) {
+        if (self.pattern_pre_fn)(pattern) {
             match pattern {
                 &mut Pattern::Blank(_) => {}
                 &mut Pattern::Id(_, ref mut sid, ref mut annotation, _) => {
@@ -480,13 +516,11 @@ impl AstWalkerMut {
             }
         }
 
-        self.pattern_post_fn.as_mut().map(|fun| fun(pattern));
+        (self.pattern_post_fn)(pattern);
     }
 
     pub fn walk_expression(&mut self, exp: &mut Expression) {
-        if self.expression_pre_fn
-               .as_mut()
-               .map_or(true, |fun| fun(exp)) {
+        if (self.expression_pre_fn)(exp) {
             match exp {
                 &mut Expression::Id(ref mut attrs, ref mut id, _) => {
                     for attr in attrs {
@@ -740,17 +774,15 @@ impl AstWalkerMut {
             }
         }
 
-        self.expression_post_fn.as_mut().map(|fun| fun(exp));
+        (self.expression_post_fn)(exp);
     }
 
     pub fn walk_ffi_language(&mut self, lang: &mut FfiLanguage) {
-        self.ffi_language_fn.as_mut().map(|fun| fun(lang));
+        (self.ffi_language_fn)(lang);
     }
 
     pub fn walk_ffi_item(&mut self, ffi_item: &mut FfiItem) {
-        if self.ffi_item_pre_fn
-               .as_mut()
-               .map_or(true, |fun| fun(ffi_item)) {
+        if (self.ffi_item_pre_fn)(ffi_item) {
             match ffi_item {
                 &mut FfiItem::Type(_, ref mut sid, _) => self.walk_simple_identifier(sid),
                 &mut FfiItem::Val(_, ref mut sid, ref mut _type, _) => {
@@ -760,6 +792,58 @@ impl AstWalkerMut {
             }
         }
 
-        self.ffi_item_post_fn.as_mut().map(|fun| fun(ffi_item));
+        (self.ffi_item_post_fn)(ffi_item);
     }
 }
+
+// let mut walker = AstWalkerMut {
+//     file_pre_fn: file_true,
+//     file_post_fn: file_unit,
+//
+//     attribute_pre_fn: attribute_true,
+//     attribute_post_fn: attribute_unit,
+//
+//     item_pre_fn: item_true,
+//     item_post_fn: item_unit,
+//
+//     use_prefix_fn: use_prefix_unit,
+//
+//     use_tree_pre_fn: use_tree_true,
+//     use_tree_post_fn: use_tree_unit,
+//
+//     simple_identifier_fn: simple_identifier_unit,
+//
+//     type_def_pre_fn: type_def_true,
+//     type_def_post_fn: type_def_unit,
+//
+//     pattern_pre_fn: pattern_true,
+//     pattern_post_fn: pattern_unit,
+//
+//     expression_pre_fn: expression_true,
+//     expression_post_fn: expression_unit,
+//
+//     ffi_language_fn: ffi_language_unit,
+//
+//     ffi_item_pre_fn: ffi_item_true,
+//     ffi_item_post_fn: ffi_item_unit,
+//
+//     type_pre_fn: type_true,
+//     type_post_fn: type_unit,
+//
+//     summand_pre_fn: summand_true,
+//     summand_post_fn: summand_unit,
+//
+//     identifier_pre_fn: identifier_true,
+//     identifier_post_fn: identifier_unit,
+//
+//     literal_fn: literal_unit,
+//
+//     macro_invocation_pre_fn: macro_invocation_true,
+//     macro_invocation_post_fn: macro_invocation_unit,
+//
+//     repetition_pre_fn: repetition_true,
+//     repetition_post_fn: repetition_unit,
+//
+//     meta_item_pre_fn: meta_item_true,
+//     meta_item_post_fn: meta_item_unit,
+// };
