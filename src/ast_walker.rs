@@ -847,3 +847,88 @@ impl<F01: FnMut(&mut File) -> bool, F02: FnMut(&mut File), F03: FnMut(&mut Attri
 //     meta_item_pre_fn: meta_item_true,
 //     meta_item_post_fn: meta_item_unit,
 // };
+
+
+
+// let errs = RefCell::new(vec![]);
+//
+// {
+//    let mut walker = AstWalkerMut {
+//        file_pre_fn: file_true,
+//        file_post_fn: file_unit,
+//
+//        attribute_pre_fn: attribute_true,
+//        attribute_post_fn: attribute_unit,
+//
+//        item_pre_fn: item_true,
+//        item_post_fn: item_unit,
+//
+//        use_prefix_fn: use_prefix_unit,
+//
+//        use_tree_pre_fn: use_tree_true,
+//        use_tree_post_fn: use_tree_unit,
+//
+//        simple_identifier_fn: simple_identifier_unit,
+//
+//        type_def_pre_fn: type_def_true,
+//        type_def_post_fn: type_def_unit,
+//
+//        pattern_pre_fn: pattern_true,
+//        pattern_post_fn: pattern_unit,
+//
+//        expression_pre_fn: expression_true,
+//        expression_post_fn: expression_unit,
+//
+//        ffi_language_fn: ffi_language_unit,
+//
+//        ffi_item_pre_fn: ffi_item_true,
+//        ffi_item_post_fn: ffi_item_unit,
+//
+//        type_pre_fn: type_true,
+//        type_post_fn: type_unit,
+//
+//        summand_pre_fn: summand_true,
+//        summand_post_fn: summand_unit,
+//
+//        identifier_pre_fn: identifier_true,
+//        identifier_post_fn: identifier_unit,
+//
+//        literal_fn: literal_unit,
+//
+//        macro_invocation_pre_fn: macro_invocation_true,
+//        macro_invocation_post_fn: macro_invocation_unit,
+//
+//        repetition_pre_fn: repetition_true,
+//        repetition_post_fn: repetition_unit,
+//
+//        meta_item_pre_fn: meta_item_true,
+//        meta_item_post_fn: meta_item_unit,
+//    };
+//
+//    walker.walk_file(file);
+// }
+//
+// errs.into_inner()
+//
+// let errs = RefCell::new(vec![]);
+// let mut walker = AstWalkerMut::new();
+//
+// walker.file_pre_fn = Some(Box::new(|file| {
+//     let mut new_file = vec![];
+//
+//     for &(ref attrs, ref item) in file.0.iter() {
+//         match should_stay(attrs, features) {
+//             Ok(true) => new_file.push((attrs.clone(), item.clone())),
+//             Ok(false) => {}
+//             Err(err) => errs.push(err),
+//         }
+//     }
+//
+//     *file = File(new_file);
+//     return true; // continue running the walker on the new file
+// }));
+//
+// walker.walk_file(file);
+// errs
+
+// TODO walk all attributes and error on unknown ones (includes checking for cc where it doesn't belong)
