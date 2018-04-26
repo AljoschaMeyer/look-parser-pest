@@ -104,6 +104,15 @@ ptr_pattern = { "@" ~ pattern }
 blank_pattern = { "_" }
 pattern = { id_pattern | blank_pattern | literal | ptr_pattern | product_named_pattern | product_anon_pattern | summand_pattern }
 
+// Irrefutable patterns
+named_pattern_irref_assign = { sid ~ "=" ~ pattern_irref }
+maybe_attributed_named_pattern_irref_assign = { (attribute+ ~ "{" ~ named_pattern_irref_assign ~ "}") | named_pattern_irref_assign }
+product_named_pattern_irref = { "(" ~ maybe_attributed_named_pattern_irref_assign ~ ("," ~ maybe_attributed_named_pattern_irref_assign)* ~ ")" }
+maybe_attributed_pattern_irref = { (attribute+ ~ "{" ~ pattern_irref ~ "}") | pattern_irref }
+product_anon_pattern_irref = { ("(" ~ maybe_attributed_pattern_irref ~ ("," ~ maybe_attributed_pattern_irref)* ~ ")") | ("(" ~ ")") }
+ptr_pattern_irref = { "@" ~ pattern_irref }
+pattern_irref = { id_pattern | blank_pattern | ptr_pattern_irref | product_named_pattern_irref | product_anon_pattern_irref }
+
 // Not an expression, but used as part of many expressions
 block = { "{" ~ ((expression ~ (";" ~ expression)*) | "") ~ "}" }
 
