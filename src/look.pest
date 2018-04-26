@@ -88,16 +88,17 @@ _type = { type_application_named | type_application_anon | id | macro_invocation
 // TypeDefs
 type_level_fun = { "<" ~ maybe_attributed_sid ~ ("," ~ maybe_attributed_sid)* ~ ">" ~ "=>" ~ type_def }
 summand = { "|" ~ sid ~ (product_named_type | product_anon_type | "") }
-maybe_annotated_summand = { ((attribute+ ~ "{" ~ summand ~ "}") | summand ) }
-sum = { _pub? ~ maybe_annotated_summand+ }
+maybe_attributed_summand = { ((attribute+ ~ "{" ~ summand ~ "}") | summand ) }
+sum = { _pub? ~ maybe_attributed_summand+ }
 type_def = { sum | type_level_fun | _type }
 
 // Patterns
 summand_pattern = { "|" ~ sid ~ (product_named_pattern | product_anon_pattern | "") }
-maybe_annotated_named_pattern = { (attribute+ ~ "{" ~ sid ~ "=" ~ pattern ~ "}") | (sid ~ "=" ~ pattern) }
-product_named_pattern = { "(" ~ maybe_annotated_named_pattern ~ ("," ~ maybe_annotated_named_pattern)* ~ ")" }
-maybe_annotated_pattern = { (attribute+ ~ "{" ~ pattern ~ "}") | pattern }
-product_anon_pattern = { ("(" ~ ")") | ("(" ~ maybe_annotated_pattern ~ ("," ~ maybe_annotated_pattern)* ~ ")") }
+named_pattern_assign = { sid ~ "=" ~ pattern }
+maybe_attributed_named_pattern_assign = { (attribute+ ~ "{" ~ named_pattern_assign ~ "}") | named_pattern_assign }
+product_named_pattern = { "(" ~ maybe_attributed_named_pattern_assign ~ ("," ~ maybe_attributed_named_pattern_assign)* ~ ")" }
+maybe_attributed_pattern = { (attribute+ ~ "{" ~ pattern ~ "}") | pattern }
+product_anon_pattern = { ("(" ~ maybe_attributed_pattern ~ ("," ~ maybe_attributed_pattern)* ~ ")") | ("(" ~ ")") }
 id_pattern = { _mut? ~ sid ~ (":" ~ _type)? }
 ptr_pattern = { "@" ~ pattern }
 blank_pattern = { "_" }
