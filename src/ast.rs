@@ -1702,10 +1702,10 @@ fn test_pattern_irref() {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct AnnotatedBinding<'i>(bool, SimpleIdentifier<'i>, Type<'i>);
+pub struct AnnotatedBinding<'i>(pub bool, pub SimpleIdentifier<'i>, pub Type<'i>);
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct FunLiteral<'i>(Vec<(Vec<Attribute<'i>>, AnnotatedBinding<'i>)>, Type<'i>, Vec<(Vec<Attribute<'i>>, Expression<'i>)>);
+pub struct FunLiteral<'i>(pub Vec<(Vec<Attribute<'i>>, AnnotatedBinding<'i>)>, pub Type<'i>, pub Vec<(Vec<Attribute<'i>>, Expression<'i>)>);
 
 fn pair_to_fun_literal<'i>(p: Pair<'i, Rule>) -> FunLiteral<'i> {
     debug_assert!(p.as_rule() == Rule::fun_literal);
