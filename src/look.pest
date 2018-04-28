@@ -170,10 +170,11 @@ ffi_val = { _pub? ~ _val ~ sid ~ ":" ~ _type }
 ffi_item = { ffi_type | ffi_val }
 ffi_language = { "C" }
 ffi_block = { _ffi ~ ffi_language ~ "{" ~ (ffi_item | (attribute+ ~ "{" ~ ffi_item ~ "}"))* ~ "}" }
-val_item = { _pub? ~ _val ~ pattern ~ "=" ~ expression }
+val_fun_item = { _pub? ~ _val ~ sid ~ "=" ~ fun_literal }
+val_item = { _pub? ~ _val ~ _mut? ~ named_type_annotated ~ "=" ~ expression }
 type_item = { _pub? ~ _type_kw ~ sid ~ "=" ~ type_def }
 use_item = { _pub? ~ _use ~ use_prefix ~ use_tree  }
-item = { use_item | type_item | val_item | ffi_block }
+item = { use_item | type_item | val_fun_item | val_item | ffi_block }
 
 // A file of look code
 file_item = { item | (attribute+ ~ "{" ~ item ~ "}") }

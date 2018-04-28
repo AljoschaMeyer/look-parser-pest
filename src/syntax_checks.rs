@@ -10,9 +10,8 @@
 //     FunLiteralUntypedPattern(usize, usize), XXX
 //     NonLValueAssignment(usize, usize), XXX
 //     ExprValPatternRefutable(usize, usize), XXX
-//     SelfUse(usize, usize),
-//     ItemValUntypedNonfunction(usize, usize),
-//     ItemValNonIdPattern(usize, usize),
+//     ItemValUntypedNonfunction(usize, usize), XXX
+//     ItemValNonIdPattern(usize, usize), XXX
 // }
 //
 // /// Performs checks on the ast that could have been done in the syntax instead, but I was too lazy.

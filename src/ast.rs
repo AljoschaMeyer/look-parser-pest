@@ -1707,6 +1707,16 @@ pub struct AnnotatedBinding<'i>(bool, SimpleIdentifier<'i>, Type<'i>);
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct FunLiteral<'i>(Vec<(Vec<Attribute<'i>>, AnnotatedBinding<'i>)>, Type<'i>, Vec<(Vec<Attribute<'i>>, Expression<'i>)>);
 
+fn pair_to_fun_literal<'i>(p: Pair<'i, Rule>) -> FunLiteral<'i> {
+    debug_assert!(p.as_rule() == Rule::fun_literal);
+    let mut pairs = p.into_inner();
+
+    let args = pair_to_fun_args(pairs.next().unwrap());
+    let ret_type = pair_to_type(pairs.next().unwrap());
+    let body = pair_to_block(pairs.next().unwrap());
+    FunLiteral(args, ret_type, body)
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum LValue<'i> {
     Id(Identifier<'i>, Pair<'i, Rule>),
@@ -2077,11 +2087,7 @@ fn pair_to_expression<'i>(p: Pair<'i, Rule>) -> Expression<'i> {
             )
         }
         Rule::fun_literal => {
-            let mut pairs = pair.into_inner();
-            let args = pair_to_fun_args(pairs.next().unwrap());
-            let ret_type = pair_to_type(pairs.next().unwrap());
-            let body = pair_to_block(pairs.next().unwrap());
-            Expression::FunLiteral(FunLiteral(args, ret_type, body), p.clone())
+            Expression::FunLiteral(pair_to_fun_literal(pair), p.clone())
         }
         Rule::generic_expression => {
             let mut pairs = pair.into_inner();
@@ -2769,484 +2775,538 @@ fn test_expression() {
     }
 }
 
-// #[derive(Debug, PartialEq, Eq, Clone)]
-// pub enum UsePrefix<'i> {
-//     Mod(Pair<'i, Rule>),
-//     Dep(Pair<'i, Rule>),
-//     Magic(Pair<'i, Rule>),
-//     None
-// }
-//
-// fn pair_to_use_prefix<'i>(pair: Pair<'i, Rule>) -> UsePrefix<'i> {
-//     debug_assert!(pair.as_rule() == Rule::use_prefix);
-//     let p = pair.clone().into_inner().next();
-//
-//     match p {
-//         None => UsePrefix::None,
-//         Some(p) => match p.as_rule() {
-//             Rule::_mod => UsePrefix::Mod(pair),
-//             Rule::_dep => UsePrefix::Dep(pair),
-//             Rule::_magic => UsePrefix::Magic(pair),
-//             _ => unreachable!(),
-//         }
-//     }
-// }
-//
-// pub fn p_use_prefix<'i>(input: &'i str) -> PestResult<UsePrefix<'i>> {
-//     LookParser::parse(Rule::use_prefix, input).map(|mut pairs| pair_to_use_prefix(pairs.next().unwrap()))
-// }
-//
-// #[test]
-// fn test_use_prefix() {
-//     match p_use_prefix("mod::").unwrap() {
-//         UsePrefix::Mod(_) => {}
-//         _ => panic!()
-//     }
-//
-//     match p_use_prefix("dep::").unwrap() {
-//         UsePrefix::Dep(_) => {}
-//         _ => panic!()
-//     }
-//
-//     match p_use_prefix("magic::").unwrap() {
-//         UsePrefix::Magic(_) => {}
-//         _ => panic!()
-//     }
-//
-//     match p_use_prefix("").unwrap() {
-//         UsePrefix::None => {}
-//         _ => panic!()
-//     }
-// }
-//
-// #[derive(Debug, PartialEq, Eq, Clone)]
-// pub enum UseTree<'i> {
-//     IdLeaf(SimpleIdentifier<'i>, Pair<'i, Rule>),
-//     SelfLeaf(Pair<'i, Rule>),
-//     IdRenamedLeaf(SimpleIdentifier<'i>, SimpleIdentifier<'i>, Pair<'i, Rule>),
-//     SelfRenamedLeaf(SimpleIdentifier<'i>, Pair<'i, Rule>),
-//     IdBranch(SimpleIdentifier<'i>, Vec<(Vec<Attribute<'i>>, UseTree<'i>)>, Pair<'i, Rule>),
-//     SuperBranch(Vec<(Vec<Attribute<'i>>, UseTree<'i>)>, Pair<'i, Rule>),
-// }
-//
-// fn pair_to_use_branch<'i>(p: Pair<'i, Rule>) -> Vec<(Vec<Attribute<'i>>, UseTree<'i>)> {
-//     debug_assert!(p.as_rule() == Rule::use_branch);
-//
-//     let mut branches = vec![];
-//
-//     for pair in p.into_inner() {
-//         match pair.as_rule() {
-//             Rule::use_tree => {
-//                 branches.push((vec![], pair_to_use_tree(pair)));
-//             }
-//             Rule::attributed_use_tree => {
-//                 let mut attrs = vec![];
-//                 let mut tree = None;
-//                 for inner_pair in pair.into_inner() {
-//                     match inner_pair.as_rule() {
-//                         Rule::attribute => attrs.push(pair_to_attribute(inner_pair)),
-//                         Rule::use_tree => tree = Some(pair_to_use_tree(inner_pair)),
-//                         _ => unreachable!()
-//                     }
-//                 }
-//                 branches.push((attrs, tree.unwrap()));
-//             }
-//             _ => unreachable!()
-//         }
-//     }
-//
-//     return branches;
-// }
-//
-// fn pair_to_use_tree<'i>(p: Pair<'i, Rule>) -> UseTree<'i> {
-//     debug_assert!(p.as_rule() == Rule::use_tree);
-//     let mut pairs = p.clone().into_inner().peekable();
-//
-//     let pair = pairs.next().unwrap();
-//     match pair.as_rule() {
-//         Rule::_self => {
-//             let is_rename = pairs.peek().is_some();
-//             if is_rename {
-//                 assert!(pairs.next().unwrap().as_rule() == Rule::_as);
-//                 UseTree::SelfRenamedLeaf(pair_to_simple_identifier(pairs.next().unwrap()), p)
-//             } else {
-//                 UseTree::SelfLeaf(p)
-//             }
-//         },
-//         Rule::sid => {
-//             let sid = pair_to_simple_identifier(pair);
-//             match pairs.next() {
-//                 None => UseTree::IdLeaf(sid, p),
-//                 Some(pair) => {
-//                     match pair.as_rule() {
-//                         Rule::scope => UseTree::IdBranch(sid, pair_to_use_branch(pairs.next().unwrap()), p),
-//                         Rule::_as => UseTree::IdRenamedLeaf(sid, pair_to_simple_identifier(pairs.next().unwrap()), p),
-//                         _ => unreachable!()
-//                     }
-//                 }
-//             }
-//         }
-//         Rule::_super => {
-//             debug_assert!(pairs.next().unwrap().as_rule() == Rule::scope);
-//             UseTree::SuperBranch(pair_to_use_branch(pairs.next().unwrap()), p)
-//         }
-//         _ => unreachable!(),
-//     }
-// }
-//
-// pub fn p_use_tree<'i>(input: &'i str) -> PestResult<UseTree<'i>> {
-//     LookParser::parse(Rule::use_tree, input).map(|mut pairs| pair_to_use_tree(pairs.next().unwrap()))
-// }
-//
-// #[test]
-// fn test_use_tree() {
-//     match p_use_tree("abc").unwrap() {
-//         UseTree::IdLeaf(sid, _) => assert_sid(&sid, "abc"),
-//         _ => panic!()
-//     }
-//
-//     match p_use_tree("super::{foo::bar, self}").unwrap() {
-//         UseTree::SuperBranch(mut branches, _) => {
-//             match branches.pop().unwrap() {
-//                 (attrs, UseTree::SelfLeaf(_)) => {
-//                     assert_eq!(attrs.len(), 0);
-//                 }
-//                 _ => panic!()
-//             }
-//
-//             match branches.pop().unwrap() {
-//                 (attrs, UseTree::IdBranch(sid, mut branches, _)) => {
-//                     assert_eq!(attrs.len(), 0);
-//                     assert_sid(&sid, "foo");
-//                     match branches.pop().unwrap() {
-//                         (attrs, UseTree::IdLeaf(sid, _)) => {
-//                             assert_eq!(attrs.len(), 0);
-//                             assert_sid(&sid, "bar");
-//                         }
-//                         _ => panic!()
-//                     }
-//                 }
-//                 _ => panic!()
-//             }
-//         }
-//         _ => panic!()
-//     }
-//
-//     match p_use_tree("abc::{#[foo]#[bar]{def}}").unwrap() {
-//         UseTree::IdBranch(sid, mut branches, _) => {
-//             assert_sid(&sid, "abc");
-//             match branches.pop().unwrap() {
-//                 (attrs, UseTree::IdLeaf(sid, _)) => {
-//                     assert_sid(&sid, "def");
-//                     assert_eq!(attrs.len(), 2)
-//                 }
-//                 _ => panic!(),
-//             }
-//         }
-//         _ => panic!()
-//     }
-//
-//     match p_use_tree("super::{foo as bar, self as baz}").unwrap() {
-//         UseTree::SuperBranch(mut branches, _) => {
-//             match branches.pop().unwrap() {
-//                 (attrs, UseTree::SelfRenamedLeaf(sid, _)) => {
-//                     assert_eq!(attrs.len(), 0);
-//                     assert_sid(&sid, "baz");
-//                 }
-//                 _ => panic!()
-//             }
-//
-//             match branches.pop().unwrap() {
-//                 (attrs, UseTree::IdRenamedLeaf(sid, new_name, _)) => {
-//                     assert_eq!(attrs.len(), 0);
-//                     assert_sid(&sid, "foo");
-//                     assert_sid(&new_name, "bar");
-//                 }
-//                 _ => panic!()
-//             }
-//         }
-//         _ => panic!()
-//     }
-// }
-//
-// #[derive(Debug, PartialEq, Eq, Clone)]
-// pub enum FfiLanguage {
-//     C
-// }
-//
-// #[derive(Debug, PartialEq, Eq, Clone)]
-// pub enum FfiItem<'i> {
-//     Type(bool, SimpleIdentifier<'i>, Pair<'i, Rule>),
-//     Val(bool, SimpleIdentifier<'i>, Type<'i>, Pair<'i, Rule>),
-// }
-//
-// fn pair_to_ffi_item<'i>(p: Pair<'i, Rule>) -> FfiItem<'i> {
-//     debug_assert!(p.as_rule() == Rule::ffi_item);
-//     let pair = p.clone().into_inner().next().unwrap();
-//
-//     match pair.as_rule() {
-//         Rule::ffi_type => {
-//             let mut pairs = pair.into_inner().peekable();
-//             let public = pairs.peek().unwrap().as_rule() == Rule::_pub;
-//
-//             if public {
-//                 pairs.next();
-//             }
-//
-//             assert!(pairs.next().unwrap().as_rule() == Rule::_type_kw);
-//             return FfiItem::Type(public, pair_to_simple_identifier(pairs.next().unwrap()), p);
-//         }
-//         Rule::ffi_val => {
-//             let mut pairs = pair.into_inner().peekable();
-//             let public = pairs.peek().unwrap().as_rule() == Rule::_pub;
-//
-//             if public {
-//                 pairs.next();
-//             }
-//
-//             assert!(pairs.next().unwrap().as_rule() == Rule::_val);
-//             let sid = pair_to_simple_identifier(pairs.next().unwrap());
-//             return FfiItem::Val(public, sid, pair_to_type(pairs.next().unwrap()), p);
-//         }
-//         _ => unreachable!()
-//     }
-// }
-//
-// #[derive(Debug, PartialEq, Eq, Clone)]
-// pub enum Item<'i> {
-//     Use(bool, UsePrefix<'i>, UseTree<'i>, Pair<'i, Rule>),
-//     Type(bool, SimpleIdentifier<'i>, TypeDef<'i>, Pair<'i, Rule>),
-//     Val(bool, Pattern<'i>, Expression<'i>, Pair<'i, Rule>),
-//     FfiBlock(FfiLanguage, Vec<(Vec<Attribute<'i>>, FfiItem<'i>)>, Pair<'i, Rule>),
-// }
-//
-// fn pair_to_use_item<'i>(p: Pair<'i, Rule>) -> Item<'i> {
-//     debug_assert!(p.as_rule() == Rule::use_item);
-//     let mut pairs = p.clone().into_inner().peekable();
-//     let public = pairs.peek().unwrap().as_rule() == Rule::_pub;
-//
-//     if public {
-//         pairs.next();
-//     }
-//
-//     assert!(pairs.next().unwrap().as_rule() == Rule::_use);
-//
-//     let prefix = pair_to_use_prefix(pairs.next().unwrap());
-//     let tree = pair_to_use_tree(pairs.next().unwrap());
-//
-//     Item::Use(public, prefix, tree, p)
-// }
-//
-// fn pair_to_type_item<'i>(p: Pair<'i, Rule>) -> Item<'i> {
-//     debug_assert!(p.as_rule() == Rule::type_item);
-//     let mut pairs = p.clone().into_inner().peekable();
-//     let public = pairs.peek().unwrap().as_rule() == Rule::_pub;
-//
-//     if public {
-//         pairs.next();
-//     }
-//
-//     assert!(pairs.next().unwrap().as_rule() == Rule::_type_kw);
-//
-//     let sid = pair_to_simple_identifier(pairs.next().unwrap());
-//     let type_def = pair_to_type_def(pairs.next().unwrap());
-//
-//     Item::Type(public, sid, type_def, p)
-// }
-//
-// fn pair_to_val_item<'i>(p: Pair<'i, Rule>) -> Item<'i> {
-//     debug_assert!(p.as_rule() == Rule::val_item);
-//     let mut pairs = p.clone().into_inner().peekable();
-//     let public = pairs.peek().unwrap().as_rule() == Rule::_pub;
-//
-//     if public {
-//         pairs.next();
-//     }
-//
-//     assert!(pairs.next().unwrap().as_rule() == Rule::_val);
-//
-//     let pattern = pair_to_pattern(pairs.next().unwrap());
-//     let val = pair_to_expression(pairs.next().unwrap());
-//
-//     Item::Val(public, pattern, val, p)
-// }
-//
-// fn pair_to_ffi_block<'i>(p: Pair<'i, Rule>) -> Item<'i> {
-//     debug_assert!(p.as_rule() == Rule::ffi_block);
-//     let mut pairs = p.clone().into_inner();
-//
-//     assert!(pairs.next().unwrap().as_rule() == Rule::_ffi);
-//     assert!(pairs.next().unwrap().as_rule() == Rule::ffi_language);
-//
-//     let mut block_items = vec![];
-//     let mut attrs = vec![];
-//
-//     for pair in pairs {
-//         match pair.as_rule() {
-//             Rule::attribute => {
-//                 attrs.push(pair_to_attribute(pair));
-//             }
-//             Rule::ffi_item => {
-//                 block_items.push((attrs.clone(), pair_to_ffi_item(pair)));
-//                 attrs = vec![];
-//             }
-//             _ => unreachable!()
-//         }
-//     }
-//
-//     Item::FfiBlock(FfiLanguage::C, block_items, p)
-// }
-//
-// fn pair_to_item<'i>(p: Pair<'i, Rule>) -> Item<'i> {
-//     debug_assert!(p.as_rule() == Rule::item);
-//     let pair = p.into_inner().next().unwrap();
-//
-//     match pair.as_rule() {
-//         Rule::use_item => pair_to_use_item(pair),
-//         Rule::type_item => pair_to_type_item(pair),
-//         Rule::val_item => pair_to_val_item(pair),
-//         Rule::ffi_block => pair_to_ffi_block(pair),
-//         _ => unreachable!()
-//     }
-// }
-//
-// pub fn p_item<'i>(input: &'i str) -> PestResult<Item<'i>> {
-//     LookParser::parse(Rule::item, input).map(|mut pairs| pair_to_item(pairs.next().unwrap()))
-// }
-//
-// #[test]
-// fn test_item() {
-//     match p_item("use foo").unwrap() {
-//         Item::Use(false, UsePrefix::None, UseTree::IdLeaf(sid, _), _) => {
-//             assert_sid(&sid, "foo");
-//         }
-//         _ => panic!()
-//     }
-//
-//     match p_item("pub use self").unwrap() {
-//         Item::Use(true, UsePrefix::None, UseTree::SelfLeaf(_), _) => {}
-//         _ => panic!()
-//     }
-//
-//     match p_item("type foo = bar").unwrap() {
-//         Item::Type(false, sid, inner, _) => {
-//             assert_sid(&sid, "foo");
-//             assert_sid_type_def(&inner, "bar");
-//         }
-//         _ => panic!()
-//     }
-//
-//     match p_item("pub type foo = bar").unwrap() {
-//         Item::Type(true, sid, inner, _) => {
-//             assert_sid(&sid, "foo");
-//             assert_sid_type_def(&inner, "bar");
-//         }
-//         _ => panic!()
-//     }
-//
-//     match p_item("val _ = bar").unwrap() {
-//         Item::Val(false, Pattern::Blank(_), inner, _) => {
-//             assert_sid_expression(&inner, "bar");
-//         }
-//         _ => panic!()
-//     }
-//
-//     match p_item("pub val _ = bar").unwrap() {
-//         Item::Val(true, Pattern::Blank(_), inner, _) => {
-//             assert_sid_expression(&inner, "bar");
-//         }
-//         _ => panic!()
-//     }
-//
-//     match p_item("ffi C {pub type abc val def: ghi}").unwrap() {
-//         Item::FfiBlock(FfiLanguage::C, mut items, _) => {
-//             match items.pop().unwrap() {
-//                 (attrs, FfiItem::Val(false, sid, the_type, _)) => {
-//                     assert_eq!(attrs.len(), 0);
-//                     assert_sid(&sid, "def");
-//                     assert_sid_type(&the_type, "ghi");
-//                 }
-//                 _ => panic!()
-//             }
-//
-//             match items.pop().unwrap() {
-//                 (attrs, FfiItem::Type(true, sid, _)) => {
-//                     assert_eq!(attrs.len(), 0);
-//                     assert_sid(&sid, "abc");
-//                 }
-//                 _ => panic!()
-//             }
-//         }
-//         _ => panic!()
-//     }
-// }
-//
-// #[derive(Debug, PartialEq, Eq, Clone)]
-// pub struct File<'i>(pub Vec<(Vec<Attribute<'i>>, Item<'i>)>);
-//
-// fn pair_to_file<'i>(p: Pair<'i, Rule>) -> File<'i> {
-//     debug_assert!(p.as_rule() == Rule::file);
-//
-//     let mut items = vec![];
-//
-//     for pair in p.clone().into_inner() {
-//         debug_assert!(pair.as_rule() == Rule::file_item);
-//         let mut attrs = vec![];
-//
-//         for pair in pair.into_inner() {
-//             match pair.as_rule() {
-//                 Rule::attribute => {
-//                     attrs.push(pair_to_attribute(pair));
-//                 }
-//                 Rule::item => {
-//                     items.push((attrs.clone(), pair_to_item(pair)));
-//                 }
-//                 _ => unreachable!()
-//             }
-//         }
-//     }
-//
-//     File(items)
-// }
-//
-// pub fn p_file<'i>(input: &'i str) -> PestResult<File<'i>> {
-//     LookParser::parse(Rule::file, input).map(|mut pairs| pair_to_file(pairs.next().unwrap()))
-// }
-//
-// #[test]
-// fn test_file() {
-//     let File(mut items) = p_file("val _ = foo #[foo] { type bar = baz }").unwrap();
-//
-//     match items.pop().unwrap() {
-//         (attrs, Item::Type(false, sid, type_def, _)) => {
-//             assert_eq!(attrs.len(), 1);
-//             assert_sid(&sid, "bar");
-//             assert_sid_type_def(&type_def, "baz");
-//         }
-//         _ => panic!()
-//     }
-//
-//     match items.pop().unwrap() {
-//         (attrs, Item::Val(false, Pattern::Blank(_), inner, _)) => {
-//             assert_eq!(attrs.len(), 0);
-//             assert_sid_expression(&inner, "foo");
-//         }
-//         _ => panic!()
-//     }
-// }
-//
-// // Well-known types: Void, Bool, U8, I8, U16, I16, U32, I32, U64, I64, USize, ISize, F32, F64
-// //
-// // List of magic:
-// //
-// // - `sizeof` macro
-// // - modules for functions for the well-known types (e.g. magic::i32::add, magic::bool::not)
-// // And some magic that can be added later as needed
-// // - `alignof` macro (can be added later)
-// // - stringify macro for features (also parse_intify, parse_floatify and a bool macro)
-// //
-// // List of attributes:
-// //
-// // - conditional compilation (`cond`)
-// // - repr (C)
-// // - test
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum UsePrefix<'i> {
+    Mod(Pair<'i, Rule>),
+    Dep(Pair<'i, Rule>),
+    Magic(Pair<'i, Rule>),
+    None
+}
+
+fn pair_to_use_prefix<'i>(pair: Pair<'i, Rule>) -> UsePrefix<'i> {
+    debug_assert!(pair.as_rule() == Rule::use_prefix);
+    let p = pair.clone().into_inner().next();
+
+    match p {
+        None => UsePrefix::None,
+        Some(p) => match p.as_rule() {
+            Rule::_mod => UsePrefix::Mod(pair),
+            Rule::_dep => UsePrefix::Dep(pair),
+            Rule::_magic => UsePrefix::Magic(pair),
+            _ => unreachable!(),
+        }
+    }
+}
+
+pub fn p_use_prefix<'i>(input: &'i str) -> PestResult<UsePrefix<'i>> {
+    LookParser::parse(Rule::use_prefix, input).map(|mut pairs| pair_to_use_prefix(pairs.next().unwrap()))
+}
+
+#[test]
+fn test_use_prefix() {
+    match p_use_prefix("mod::").unwrap() {
+        UsePrefix::Mod(_) => {}
+        _ => panic!()
+    }
+
+    match p_use_prefix("dep::").unwrap() {
+        UsePrefix::Dep(_) => {}
+        _ => panic!()
+    }
+
+    match p_use_prefix("magic::").unwrap() {
+        UsePrefix::Magic(_) => {}
+        _ => panic!()
+    }
+
+    match p_use_prefix("").unwrap() {
+        UsePrefix::None => {}
+        _ => panic!()
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum UseTree<'i> {
+    IdLeaf(SimpleIdentifier<'i>, Pair<'i, Rule>),
+    SelfLeaf(Pair<'i, Rule>),
+    IdRenamedLeaf(SimpleIdentifier<'i>, SimpleIdentifier<'i>, Pair<'i, Rule>),
+    SelfRenamedLeaf(SimpleIdentifier<'i>, Pair<'i, Rule>),
+    IdBranch(SimpleIdentifier<'i>, Vec<(Vec<Attribute<'i>>, UseTree<'i>)>, Pair<'i, Rule>),
+    SuperBranch(Vec<(Vec<Attribute<'i>>, UseTree<'i>)>, Pair<'i, Rule>),
+}
+
+fn pair_to_use_branch<'i>(p: Pair<'i, Rule>) -> Vec<(Vec<Attribute<'i>>, UseTree<'i>)> {
+    debug_assert!(p.as_rule() == Rule::use_branch);
+
+    let mut branches = vec![];
+
+    for pair in p.into_inner() {
+        match pair.as_rule() {
+            Rule::use_tree => {
+                branches.push((vec![], pair_to_use_tree(pair)));
+            }
+            Rule::attributed_use_tree => {
+                let mut attrs = vec![];
+                let mut tree = None;
+                for inner_pair in pair.into_inner() {
+                    match inner_pair.as_rule() {
+                        Rule::attribute => attrs.push(pair_to_attribute(inner_pair)),
+                        Rule::use_tree => tree = Some(pair_to_use_tree(inner_pair)),
+                        _ => unreachable!()
+                    }
+                }
+                branches.push((attrs, tree.unwrap()));
+            }
+            _ => unreachable!()
+        }
+    }
+
+    return branches;
+}
+
+fn pair_to_use_tree<'i>(p: Pair<'i, Rule>) -> UseTree<'i> {
+    debug_assert!(p.as_rule() == Rule::use_tree);
+    let mut pairs = p.clone().into_inner().peekable();
+
+    let pair = pairs.next().unwrap();
+    match pair.as_rule() {
+        Rule::_self => {
+            let is_rename = pairs.peek().is_some();
+            if is_rename {
+                assert!(pairs.next().unwrap().as_rule() == Rule::_as);
+                UseTree::SelfRenamedLeaf(pair_to_simple_identifier(pairs.next().unwrap()), p)
+            } else {
+                UseTree::SelfLeaf(p)
+            }
+        },
+        Rule::sid => {
+            let sid = pair_to_simple_identifier(pair);
+            match pairs.next() {
+                None => UseTree::IdLeaf(sid, p),
+                Some(pair) => {
+                    match pair.as_rule() {
+                        Rule::scope => UseTree::IdBranch(sid, pair_to_use_branch(pairs.next().unwrap()), p),
+                        Rule::_as => UseTree::IdRenamedLeaf(sid, pair_to_simple_identifier(pairs.next().unwrap()), p),
+                        _ => unreachable!()
+                    }
+                }
+            }
+        }
+        Rule::_super => {
+            debug_assert!(pairs.next().unwrap().as_rule() == Rule::scope);
+            UseTree::SuperBranch(pair_to_use_branch(pairs.next().unwrap()), p)
+        }
+        _ => unreachable!(),
+    }
+}
+
+pub fn p_use_tree<'i>(input: &'i str) -> PestResult<UseTree<'i>> {
+    LookParser::parse(Rule::use_tree, input).map(|mut pairs| pair_to_use_tree(pairs.next().unwrap()))
+}
+
+#[test]
+fn test_use_tree() {
+    match p_use_tree("abc").unwrap() {
+        UseTree::IdLeaf(sid, _) => assert_sid(&sid, "abc"),
+        _ => panic!()
+    }
+
+    match p_use_tree("super::{foo::bar, self}").unwrap() {
+        UseTree::SuperBranch(mut branches, _) => {
+            match branches.pop().unwrap() {
+                (attrs, UseTree::SelfLeaf(_)) => {
+                    assert_eq!(attrs.len(), 0);
+                }
+                _ => panic!()
+            }
+
+            match branches.pop().unwrap() {
+                (attrs, UseTree::IdBranch(sid, mut branches, _)) => {
+                    assert_eq!(attrs.len(), 0);
+                    assert_sid(&sid, "foo");
+                    match branches.pop().unwrap() {
+                        (attrs, UseTree::IdLeaf(sid, _)) => {
+                            assert_eq!(attrs.len(), 0);
+                            assert_sid(&sid, "bar");
+                        }
+                        _ => panic!()
+                    }
+                }
+                _ => panic!()
+            }
+        }
+        _ => panic!()
+    }
+
+    match p_use_tree("abc::{#[foo]#[bar]{def}}").unwrap() {
+        UseTree::IdBranch(sid, mut branches, _) => {
+            assert_sid(&sid, "abc");
+            match branches.pop().unwrap() {
+                (attrs, UseTree::IdLeaf(sid, _)) => {
+                    assert_sid(&sid, "def");
+                    assert_eq!(attrs.len(), 2)
+                }
+                _ => panic!(),
+            }
+        }
+        _ => panic!()
+    }
+
+    match p_use_tree("super::{foo as bar, self as baz}").unwrap() {
+        UseTree::SuperBranch(mut branches, _) => {
+            match branches.pop().unwrap() {
+                (attrs, UseTree::SelfRenamedLeaf(sid, _)) => {
+                    assert_eq!(attrs.len(), 0);
+                    assert_sid(&sid, "baz");
+                }
+                _ => panic!()
+            }
+
+            match branches.pop().unwrap() {
+                (attrs, UseTree::IdRenamedLeaf(sid, new_name, _)) => {
+                    assert_eq!(attrs.len(), 0);
+                    assert_sid(&sid, "foo");
+                    assert_sid(&new_name, "bar");
+                }
+                _ => panic!()
+            }
+        }
+        _ => panic!()
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum FfiLanguage {
+    C
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum FfiItem<'i> {
+    Type(bool, SimpleIdentifier<'i>, Pair<'i, Rule>),
+    Val(bool, SimpleIdentifier<'i>, Type<'i>, Pair<'i, Rule>),
+}
+
+fn pair_to_ffi_item<'i>(p: Pair<'i, Rule>) -> FfiItem<'i> {
+    debug_assert!(p.as_rule() == Rule::ffi_item);
+    let pair = p.clone().into_inner().next().unwrap();
+
+    match pair.as_rule() {
+        Rule::ffi_type => {
+            let mut pairs = pair.into_inner().peekable();
+            let public = pairs.peek().unwrap().as_rule() == Rule::_pub;
+
+            if public {
+                pairs.next();
+            }
+
+            assert!(pairs.next().unwrap().as_rule() == Rule::_type_kw);
+            return FfiItem::Type(public, pair_to_simple_identifier(pairs.next().unwrap()), p);
+        }
+        Rule::ffi_val => {
+            let mut pairs = pair.into_inner().peekable();
+            let public = pairs.peek().unwrap().as_rule() == Rule::_pub;
+
+            if public {
+                pairs.next();
+            }
+
+            assert!(pairs.next().unwrap().as_rule() == Rule::_val);
+            let sid = pair_to_simple_identifier(pairs.next().unwrap());
+            return FfiItem::Val(public, sid, pair_to_type(pairs.next().unwrap()), p);
+        }
+        _ => unreachable!()
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum Item<'i> {
+    Use(bool, UsePrefix<'i>, UseTree<'i>, Pair<'i, Rule>),
+    Type(bool, SimpleIdentifier<'i>, TypeDef<'i>, Pair<'i, Rule>),
+    ValFun(bool, SimpleIdentifier<'i>, FunLiteral<'i>, Pair<'i, Rule>),
+    Val(bool, bool, SimpleIdentifier<'i>, Type<'i>, Expression<'i>, Pair<'i, Rule>),
+    FfiBlock(FfiLanguage, Vec<(Vec<Attribute<'i>>, FfiItem<'i>)>, Pair<'i, Rule>),
+}
+
+fn pair_to_use_item<'i>(p: Pair<'i, Rule>) -> Item<'i> {
+    debug_assert!(p.as_rule() == Rule::use_item);
+    let mut pairs = p.clone().into_inner().peekable();
+    let public = pairs.peek().unwrap().as_rule() == Rule::_pub;
+
+    if public {
+        pairs.next();
+    }
+
+    assert!(pairs.next().unwrap().as_rule() == Rule::_use);
+
+    let prefix = pair_to_use_prefix(pairs.next().unwrap());
+    let tree = pair_to_use_tree(pairs.next().unwrap());
+
+    Item::Use(public, prefix, tree, p)
+}
+
+fn pair_to_type_item<'i>(p: Pair<'i, Rule>) -> Item<'i> {
+    debug_assert!(p.as_rule() == Rule::type_item);
+    let mut pairs = p.clone().into_inner().peekable();
+    let public = pairs.peek().unwrap().as_rule() == Rule::_pub;
+
+    if public {
+        pairs.next();
+    }
+
+    assert!(pairs.next().unwrap().as_rule() == Rule::_type_kw);
+
+    let sid = pair_to_simple_identifier(pairs.next().unwrap());
+    let type_def = pair_to_type_def(pairs.next().unwrap());
+
+    Item::Type(public, sid, type_def, p)
+}
+
+fn pair_to_val_fun_item<'i>(p: Pair<'i, Rule>) -> Item<'i> {
+    debug_assert!(p.as_rule() == Rule::val_fun_item);
+    let mut pairs = p.clone().into_inner().peekable();
+
+    let public = pairs.peek().unwrap().as_rule() == Rule::_pub;
+    if public {
+        pairs.next();
+    }
+
+    assert!(pairs.next().unwrap().as_rule() == Rule::_val);
+
+    let sid = pair_to_simple_identifier(pairs.next().unwrap());
+    let fun = pair_to_fun_literal(pairs.next().unwrap());
+
+    Item::ValFun(public, sid, fun, p)
+}
+
+fn pair_to_val_item<'i>(p: Pair<'i, Rule>) -> Item<'i> {
+    debug_assert!(p.as_rule() == Rule::val_item);
+    let mut pairs = p.clone().into_inner().peekable();
+
+    let public = pairs.peek().unwrap().as_rule() == Rule::_pub;
+    if public {
+        pairs.next();
+    }
+
+    assert!(pairs.next().unwrap().as_rule() == Rule::_val);
+
+    let mutable = pairs.peek().unwrap().as_rule() == Rule::_mut;
+    if mutable {
+        pairs.next();
+    }
+
+    let pair = pairs.next().unwrap();
+    debug_assert!(pair.as_rule() == Rule::named_type_annotated);
+    let mut inner_pairs = pair.into_inner();
+    let sid = pair_to_simple_identifier(inner_pairs.next().unwrap());
+    let _type = pair_to_type(inner_pairs.next().unwrap());
+
+    let val = pair_to_expression(pairs.next().unwrap());
+
+    Item::Val(public, mutable, sid, _type, val, p)
+}
+
+fn pair_to_ffi_block<'i>(p: Pair<'i, Rule>) -> Item<'i> {
+    debug_assert!(p.as_rule() == Rule::ffi_block);
+    let mut pairs = p.clone().into_inner();
+
+    assert!(pairs.next().unwrap().as_rule() == Rule::_ffi);
+    assert!(pairs.next().unwrap().as_rule() == Rule::ffi_language);
+
+    let mut block_items = vec![];
+    let mut attrs = vec![];
+
+    for pair in pairs {
+        match pair.as_rule() {
+            Rule::attribute => {
+                attrs.push(pair_to_attribute(pair));
+            }
+            Rule::ffi_item => {
+                block_items.push((attrs.clone(), pair_to_ffi_item(pair)));
+                attrs = vec![];
+            }
+            _ => unreachable!()
+        }
+    }
+
+    Item::FfiBlock(FfiLanguage::C, block_items, p)
+}
+
+fn pair_to_item<'i>(p: Pair<'i, Rule>) -> Item<'i> {
+    debug_assert!(p.as_rule() == Rule::item);
+    let pair = p.into_inner().next().unwrap();
+
+    match pair.as_rule() {
+        Rule::use_item => pair_to_use_item(pair),
+        Rule::type_item => pair_to_type_item(pair),
+        Rule::val_fun_item => pair_to_val_fun_item(pair),
+        Rule::val_item => pair_to_val_item(pair),
+        Rule::ffi_block => pair_to_ffi_block(pair),
+        _ => unreachable!()
+    }
+}
+
+pub fn p_item<'i>(input: &'i str) -> PestResult<Item<'i>> {
+    LookParser::parse(Rule::item, input).map(|mut pairs| pair_to_item(pairs.next().unwrap()))
+}
+
+#[test]
+fn test_item() {
+    match p_item("use foo").unwrap() {
+        Item::Use(false, UsePrefix::None, UseTree::IdLeaf(sid, _), _) => {
+            assert_sid(&sid, "foo");
+        }
+        _ => panic!()
+    }
+
+    match p_item("pub use self").unwrap() {
+        Item::Use(true, UsePrefix::None, UseTree::SelfLeaf(_), _) => {}
+        _ => panic!()
+    }
+
+    match p_item("type foo = bar").unwrap() {
+        Item::Type(false, sid, inner, _) => {
+            assert_sid(&sid, "foo");
+            assert_sid_type_def(&inner, "bar");
+        }
+        _ => panic!()
+    }
+
+    match p_item("pub type foo = bar").unwrap() {
+        Item::Type(true, sid, inner, _) => {
+            assert_sid(&sid, "foo");
+            assert_sid_type_def(&inner, "bar");
+        }
+        _ => panic!()
+    }
+
+    match p_item("val foo = () -> bar {}").unwrap() {
+        Item::ValFun(false, sid, FunLiteral(args, ret_type, body), _) => {
+            assert_sid(&sid, "foo");
+            assert_eq!(args.len(), 0);
+            assert_sid_type(&ret_type, "bar");
+            assert_eq!(body.len(), 0);
+        }
+        _ => panic!()
+    }
+
+    match p_item("val foo: xyz = bar").unwrap() {
+        Item::Val(false, false, sid, type_annotation, inner, _) => {
+            assert_sid(&sid, "foo");
+            assert_sid_type(&type_annotation, "xyz");
+            assert_sid_expression(&inner, "bar");
+        }
+        _ => panic!()
+    }
+
+    match p_item("pub val foo: xyz = bar").unwrap() {
+        Item::Val(true, false, sid, type_annotation, inner, _) => {
+            assert_sid(&sid, "foo");
+            assert_sid_type(&type_annotation, "xyz");
+            assert_sid_expression(&inner, "bar");
+        }
+        _ => panic!()
+    }
+
+    match p_item("pub val mut foo: xyz = bar").unwrap() {
+        Item::Val(true, true, sid, type_annotation, inner, _) => {
+            assert_sid(&sid, "foo");
+            assert_sid_type(&type_annotation, "xyz");
+            assert_sid_expression(&inner, "bar");
+        }
+        _ => panic!()
+    }
+
+    match p_item("ffi C {pub type abc val def: ghi}").unwrap() {
+        Item::FfiBlock(FfiLanguage::C, mut items, _) => {
+            match items.pop().unwrap() {
+                (attrs, FfiItem::Val(false, sid, the_type, _)) => {
+                    assert_eq!(attrs.len(), 0);
+                    assert_sid(&sid, "def");
+                    assert_sid_type(&the_type, "ghi");
+                }
+                _ => panic!()
+            }
+
+            match items.pop().unwrap() {
+                (attrs, FfiItem::Type(true, sid, _)) => {
+                    assert_eq!(attrs.len(), 0);
+                    assert_sid(&sid, "abc");
+                }
+                _ => panic!()
+            }
+        }
+        _ => panic!()
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct File<'i>(pub Vec<(Vec<Attribute<'i>>, Item<'i>)>);
+
+fn pair_to_file<'i>(p: Pair<'i, Rule>) -> File<'i> {
+    debug_assert!(p.as_rule() == Rule::file);
+
+    let mut items = vec![];
+
+    for pair in p.clone().into_inner() {
+        debug_assert!(pair.as_rule() == Rule::file_item);
+        let mut attrs = vec![];
+
+        for pair in pair.into_inner() {
+            match pair.as_rule() {
+                Rule::attribute => {
+                    attrs.push(pair_to_attribute(pair));
+                }
+                Rule::item => {
+                    items.push((attrs.clone(), pair_to_item(pair)));
+                }
+                _ => unreachable!()
+            }
+        }
+    }
+
+    File(items)
+}
+
+pub fn p_file<'i>(input: &'i str) -> PestResult<File<'i>> {
+    LookParser::parse(Rule::file, input).map(|mut pairs| pair_to_file(pairs.next().unwrap()))
+}
+
+#[test]
+fn test_file() {
+    let File(mut items) = p_file("val abc: def = foo #[foo] { type bar = baz }").unwrap();
+
+    match items.pop().unwrap() {
+        (attrs, Item::Type(false, sid, type_def, _)) => {
+            assert_eq!(attrs.len(), 1);
+            assert_sid(&sid, "bar");
+            assert_sid_type_def(&type_def, "baz");
+        }
+        _ => panic!()
+    }
+
+    match items.pop().unwrap() {
+        (attrs, Item::Val(false, false, sid, annotation, inner, _)) => {
+            assert_eq!(attrs.len(), 0);
+            assert_sid(&sid, "abc");
+            assert_sid_type(&annotation, "def");
+            assert_sid_expression(&inner, "foo");
+        }
+        _ => panic!()
+    }
+}
+
+// Well-known types: Void, Bool, U8, I8, U16, I16, U32, I32, U64, I64, USize, ISize, F32, F64
+//
+// List of magic:
+//
+// - `sizeof` macro
+// - modules for functions for the well-known types (e.g. magic::i32::add, magic::bool::not)
+// And some magic that can be added later as needed
+// - `alignof` macro (can be added later)
+// - stringify macro for features (also parse_intify, parse_floatify and a bool macro)
+//
+// List of attributes:
+//
+// - conditional compilation (`cond`)
+// - repr (C)
+// - test
