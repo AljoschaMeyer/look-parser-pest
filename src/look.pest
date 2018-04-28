@@ -70,8 +70,8 @@ repetition = { bin_int | hex_int | dec_int | macro_invocation }
 // Types
 fun_named_type = { product_named_type ~ "->" ~ _type }
 fun_anon_type = { product_anon_type ~ "->" ~ _type }
-named_type_annotation = { sid ~ ":" ~ _type }
-maybe_attributed_named_type_annotated = { (attribute+ ~ "{" ~ named_type_annotation ~ "}") | named_type_annotation }
+named_type_annotated = { sid ~ ":" ~ _type }
+maybe_attributed_named_type_annotated = { (attribute+ ~ "{" ~ named_type_annotated ~ "}") | named_type_annotated }
 product_named_type = { "(" ~ maybe_attributed_named_type_annotated ~ ("," ~ maybe_attributed_named_type_annotated)* ~ ")" }
 product_anon_type = { ("(" ~ maybe_attributed_type ~ ("," ~ maybe_attributed_type)* ~ ")") | ("(" ~ ")") }
 product_repeated_type = { "(" ~ _type ~ ";" ~ repetition ~ ")" }
@@ -99,6 +99,8 @@ maybe_attributed_named_pattern_assign = { (attribute+ ~ "{" ~ named_pattern_assi
 product_named_pattern = { "(" ~ maybe_attributed_named_pattern_assign ~ ("," ~ maybe_attributed_named_pattern_assign)* ~ ")" }
 maybe_attributed_pattern = { (attribute+ ~ "{" ~ pattern ~ "}") | pattern }
 product_anon_pattern = { ("(" ~ maybe_attributed_pattern ~ ("," ~ maybe_attributed_pattern)* ~ ")") | ("(" ~ ")") }
+maybe_attributed_annotated_id_pattern = { (attribute+ ~ "{" ~ annotated_id_pattern ~ "}") | annotated_id_pattern }
+annotated_id_pattern = { _mut? ~ named_type_annotated }
 id_pattern = { _mut? ~ sid ~ (":" ~ _type)? }
 ptr_pattern = { "@" ~ pattern }
 blank_pattern = { "_" }
@@ -113,41 +115,48 @@ product_anon_pattern_irref = { ("(" ~ maybe_attributed_pattern_irref ~ ("," ~ ma
 ptr_pattern_irref = { "@" ~ pattern_irref }
 pattern_irref = { id_pattern | blank_pattern | ptr_pattern_irref | product_named_pattern_irref | product_anon_pattern_irref }
 
-// Not an expression, but used as part of many expressions
-block = { "{" ~ ((expression ~ (";" ~ expression)*) | "") ~ "}" }
+// LValues (valid lhs of an assignment)
+lvalue_ = { (deref_mut_ | array_index_ | product_access_anon_ | product_access_named_)* }
+lvalue = { id ~ lvalue_ }
 
 // Left recursive expressions
-assignment_ = { "=" ~ expression }
 lor_ = { "||" ~ expression }
 land_ = { "&&" ~ expression }
-cast_ = { "as" ~ _type }
-product_access_anon_ = { "." ~ literal }
+cast_ = { _as ~ _type }
+product_access_anon_ = { "." ~ dec_int }
 product_access_named_ = { "." ~ sid }
 array_index_ = { "[" ~ expression ~ "]" }
 deref_mut_ = { "~" }
 deref_ = { "@" }
-expression_ = { deref_ | deref_mut_ | array_index_ | product_access_named_ | product_access_anon_ | cast_ | product_named_expression | product_anon_expression | assignment_ | land_ | lor_ | "" }
+expression_ = { (deref_ | deref_mut_ | array_index_ | product_access_named_ | product_access_anon_ | cast_ | product_named_expression | product_anon_expression | land_ | lor_)* }
 
 // Expressions
+maybe_attributed_patterned_block = { ((attribute+ ~ "{" ~ patterned_block ~ "}") | patterned_block) }
+patterned_block = { pattern ~ block }
+block = { "{" ~ ((maybe_attributed_expression ~ (";" ~ maybe_attributed_expression)*) | "") ~ "}" }
 break_expression = { _break ~ expression? }
 return_expression = { _return ~ expression? }
 while_expression = { _while ~ expression ~ block }
-loop_expression = { _loop ~ expression ~ "{" ~ (pattern ~ block)* ~ "}" }
-case_expression = { _case ~ expression ~ "{" ~ (pattern ~ block)* ~ "}" }
+loop_expression = { _loop ~ expression ~ "{" ~ (maybe_attributed_patterned_block)* ~ "}" }
+case_expression = { _case ~ expression ~ "{" ~ (maybe_attributed_patterned_block)* ~ "}" }
 if_expression = { _if ~ expression ~ block ~ (_else ~ (if_expression | block))? }
-val_expression = { _val ~ pattern ~ ("=" ~ expression)? }
-generic_expression = { "<" ~ maybe_attributed_sid ~ ("," ~ maybe_attributed_sid)* ~ ">" ~ "=>" ~ expression }
-fun_literal = { product_anon_pattern ~ "->" ~ _type ~ block }
-actual_named_product_field_expression = { sid ~ "=" ~ expression }
-named_product_field_expression = { (attribute+ ~ "{" ~ actual_named_product_field_expression ~ "}") | actual_named_product_field_expression }
-product_named_expression = { "(" ~ named_product_field_expression ~ ("," ~ named_product_field_expression)* ~ ")" }
-product_anon_expression = { "(" ~ ( expression ~ ("," ~ expression)* | "") ~ ")" }
+val_expression = { _val ~ pattern_irref ~ ("=" ~ expression)? }
+generic_args_def = { "<" ~ maybe_attributed_sid ~ ("," ~ maybe_attributed_sid)* ~ ">" }
+generic_expression = { generic_args_def ~ "=>" ~ expression }
+fun_args = { "(" ~ ((maybe_attributed_annotated_id_pattern ~ ("," ~ maybe_attributed_annotated_id_pattern)*) | "") ~ ")" }
+fun_literal = { fun_args ~ "->" ~ _type ~ block }
+named_expression_assign = { sid ~ "=" ~ expression }
+maybe_attributed_named_expression_assign = { (attribute+ ~ "{" ~ named_expression_assign ~ "}") | named_expression_assign }
+product_named_expression = { "(" ~ maybe_attributed_named_expression_assign ~ ("," ~ maybe_attributed_named_expression_assign)* ~ ")" }
+product_anon_expression = { ("(" ~ maybe_attributed_expression ~ ("," ~ maybe_attributed_expression)* ~ ")") | ("(" ~ ")") }
 product_repeated_expression = { "(" ~ expression ~ ";" ~ repetition ~ ")" }
 array_expression = { "[" ~ expression ~ "]" }
 ref_expression = { "@" ~ expression }
 ref_mut_expression = { "~" ~ expression }
-lexpression = { literal | type_application_named | type_application_anon | id | macro_invocation | ref_expression | ref_mut_expression | array_expression | product_repeated_expression | fun_literal | product_named_expression | product_anon_expression | generic_expression | val_expression | case_expression | loop_expression | while_expression | return_expression | break_expression | if_expression }
-expression = { (attribute+ ~ "{" ~ lexpression ~ expression_ ~ "}") | (lexpression ~ expression_) }
+assignment_expression = { lvalue ~ "=" ~ expression }
+lexpression = { assignment_expression | literal | type_application_named | type_application_anon | id | macro_invocation | ref_expression | ref_mut_expression | array_expression | product_repeated_expression | fun_literal | product_named_expression | product_anon_expression | generic_expression | val_expression | case_expression | loop_expression | while_expression | return_expression | break_expression | if_expression | block }
+maybe_attributed_expression = { ((attribute+ ~ "{" ~ expression ~ "}") | expression) }
+expression = { lexpression ~ expression_ }
 
 // Uses
 use_prefix = { (_mod ~ scope) | (_dep ~ scope) | (_magic ~ scope) | "" }

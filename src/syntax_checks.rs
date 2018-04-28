@@ -5,12 +5,11 @@
 //
 // pub enum PseudoSyntaxError {
 //     // usizes are start and end offset in the source str
-//     ProductAccessNonIntLiteral(usize, usize),
-//     FunLiteralNonIdPattern(usize, usize),
-//     FunLiteralUntypedPattern(usize, usize),
-//     NonFunGenericExpr(usize, usize),
-//     NonLValueAssignment(usize, usize),
-//     ExprValPatternRefutable(usize, usize),
+//     ProductAccessNonIntLiteral(usize, usize), XXX
+//     FunLiteralNonIdPattern(usize, usize), XXX
+//     FunLiteralUntypedPattern(usize, usize), XXX
+//     NonLValueAssignment(usize, usize), XXX
+//     ExprValPatternRefutable(usize, usize), XXX
 //     SelfUse(usize, usize),
 //     ItemValUntypedNonfunction(usize, usize),
 //     ItemValNonIdPattern(usize, usize),
