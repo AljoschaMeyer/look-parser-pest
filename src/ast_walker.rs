@@ -60,10 +60,10 @@ pub fn meta_item_true(_: &mut MetaItem) -> bool {
     true
 }
 pub fn meta_item_unit(_: &mut MetaItem) {}
-pub fn pattern_irref_true(_: &mut Pattern) -> bool {
+pub fn pattern_irref_true(_: &mut PatternIrref) -> bool {
     true
 }
-pub fn pattern_irref_unit(_: &mut Pattern) {}
+pub fn pattern_irref_unit(_: &mut PatternIrref) {}
 pub fn lvalue_true(_: &mut LValue) -> bool {
     true
 }
